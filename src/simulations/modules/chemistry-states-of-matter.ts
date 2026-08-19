@@ -11,11 +11,8 @@ const DEFAULTS = { temperature: 24, substance: "water" } as const;
 const FIXED_STEP = 1 / 90;
 const MAX_FRAME_STEP = 1 / 20;
 const GRAPH_WINDOW = 240;
-const PARTICLE_COUNT = 90;
 const CHAMBER = { left: 270, right: 770, top: 92, bottom: 526 } as const;
-
-type Trend = "HEATING" | "COOLING" | "STABLE";
-type ActionMode = "melting" | "boiling" | null;
+const PARTICLE_COUNT = 72;
 
 interface MaterialConfig {
   label: string;
@@ -46,21 +43,21 @@ function stringParam(params: SimulationParams, id: string, fallback: string): st
   return typeof value === "string" ? value : fallback;
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
+function createSvgElement<K extends keyof SVGElementTagNameMap>(
+  tag: K,
+  attributes: Record<string, string>,
+): SVGElementTagNameMap[K] {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, value);
+  return element;
 }
 
 function format(value: number, digits = 1): string {
   return value.toFixed(digits);
 }
 
-function svg<K extends keyof SVGElementTagNameMap>(
-  tag: K,
-  attributes: Record<string, string>,
-): SVGElementTagNameMap[K] {
-  const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
-  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
-  return node;
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 function createStatesModule(): SimulationModule {
@@ -95,22 +92,6 @@ function createStatesModule(): SimulationModule {
         defaultValue: DEFAULTS.substance,
         group: "Sample",
       },
-      {
-        kind: "button",
-        id: "melting",
-        label: "Melting",
-        actionId: "melting",
-        variant: "subject",
-        group: "Phase animations",
-      },
-      {
-        kind: "button",
-        id: "boiling",
-        label: "Boiling",
-        actionId: "boiling",
-        variant: "subject",
-        group: "Phase animations",
-      },
     ],
     graph: {
       title: "Temperature vs time",
@@ -121,11 +102,11 @@ function createStatesModule(): SimulationModule {
     },
     explanation: {
       whatsHappening:
-        "The same molecules reorganize as their energy changes: crystals vibrate, liquid molecules flow, and vapour molecules diffuse.",
+        "Particles remain in continuous motion. Temperature changes their kinetic energy, while attractive forces influence how closely they stay together.",
       keyConcept:
-        "A phase change is a continuous change in spacing, organization and molecular motion.",
+        "A phase is an emergent pattern of particle spacing, organization and motion—not a separate animation.",
       deeperDive:
-        "During melting and freezing, the molecules themselves move between an ordered crystal arrangement and a flowing liquid arrangement.",
+        "During a phase transition, added or removed energy changes particle freedom while the material moves smoothly between arrangements.",
     },
     aspectRatio: 4 / 3,
     mount(context: MountContext): SimulationInstance {
@@ -134,44 +115,59 @@ function createStatesModule(): SimulationModule {
       let temperature = numberParam(params, "temperature", DEFAULTS.temperature);
       let previousTemperature = temperature;
       let substanceId = stringParam(params, "substance", DEFAULTS.substance);
-      let material: MaterialConfig = MATERIALS[substanceId] ?? MATERIALS["water"]!;
+      let material = MATERIALS[substanceId] ?? MATERIALS["water"]!;
       let running = false;
       let elapsed = 0;
       let accumulator = 0;
       let uiAccumulator = 0;
       let lastTimestamp = performance.now();
       let animationFrame = 0;
-      let trend: Trend = "STABLE";
-      let actionMode: ActionMode = null;
-      let visualPhase = phaseFromTemperature();
+      let width = 800;
+      let height = 600;
+      let trend: "HEATING" | "COOLING" | "STABLE" = "STABLE";
+      let visualPhase = 1;
 
-      const particles = Array.from({ length: PARTICLE_COUNT }, (_, index) => ({
-        seed: index + 1,
-        z: ((index * 37) % 100) / 100,
-        gasX: 304 + ((index * 61) % 432),
-        gasY: 122 + ((index * 47) % 370),
-        gasVX: 18 + ((index * 13) % 30),
-        gasVY: -32 - ((index * 19) % 24),
-        escaped: false,
-      }));
+      const particles = Array.from({ length: PARTICLE_COUNT }, (_, index) => {
+        const column = index % 12;
+        const row = Math.floor(index / 12);
+        return {
+          seed: index + 1,
+          latticeX: 325 + column * 32,
+          latticeY: 178 + row * 38,
+          z: ((index * 17) % 100) / 100,
+          x: 330 + ((index * 71) % 380),
+          y: 150 + ((index * 43) % 310),
+          gasX: 305 + ((index * 61) % 430),
+          gasY: 125 + ((index * 47) % 360),
+          gasVX: 22 + ((index * 13) % 27),
+          gasVY: 18 + ((index * 19) % 24),
+        };
+      });
 
       const root = document.createElement("div");
       root.className = "absolute inset-0 overflow-hidden";
       container.replaceChildren(root);
-      const scene = svg("svg", {
+
+      const svg = createSvgElement("svg", {
         viewBox: "0 0 800 600",
-        class: "h-full w-full",
         role: "img",
         "aria-label": "Interactive states of matter molecular simulation",
+        class: "h-full w-full",
         preserveAspectRatio: "xMidYMid meet",
       });
-      const defs = svg("defs", {});
-      const bg = svg("linearGradient", { id: "states-bg", x1: "0", y1: "0", x2: "0", y2: "1" });
-      bg.append(
-        svg("stop", { offset: "0%", "stop-color": "#10152d" }),
-        svg("stop", { offset: "100%", "stop-color": "#070b16" }),
+      const defs = createSvgElement("defs", {});
+      const backgroundGradient = createSvgElement("linearGradient", {
+        id: "states-bg",
+        x1: "0",
+        y1: "0",
+        x2: "0",
+        y2: "1",
+      });
+      backgroundGradient.append(
+        createSvgElement("stop", { offset: "0%", "stop-color": "#10152d" }),
+        createSvgElement("stop", { offset: "100%", "stop-color": "#070b16" }),
       );
-      const chamberGradient = svg("linearGradient", {
+      const chamberGradient = createSvgElement("linearGradient", {
         id: "states-chamber",
         x1: "0",
         y1: "0",
@@ -179,28 +175,36 @@ function createStatesModule(): SimulationModule {
         y2: "1",
       });
       chamberGradient.append(
-        svg("stop", { offset: "0%", "stop-color": "#173c58", "stop-opacity": "0.42" }),
-        svg("stop", { offset: "100%", "stop-color": "#080d1c", "stop-opacity": "0.82" }),
+        createSvgElement("stop", { offset: "0%", "stop-color": "#14324b", "stop-opacity": "0.48" }),
+        createSvgElement("stop", {
+          offset: "100%",
+          "stop-color": "#080d1c",
+          "stop-opacity": "0.74",
+        }),
       );
-      const particleGradient = svg("radialGradient", {
+      const particleGradient = createSvgElement("radialGradient", {
         id: "states-particle",
-        cx: "30%",
-        cy: "24%",
-        r: "72%",
+        cx: "32%",
+        cy: "25%",
+        r: "70%",
       });
       particleGradient.append(
-        svg("stop", { offset: "0%", "stop-color": "#ffffff", "stop-opacity": "0.98" }),
-        svg("stop", { offset: "32%", "stop-color": "#a4efff", "stop-opacity": "0.95" }),
-        svg("stop", { offset: "100%", "stop-color": "#2675ba", "stop-opacity": "0.72" }),
+        createSvgElement("stop", { offset: "0%", "stop-color": "#ffffff", "stop-opacity": "0.95" }),
+        createSvgElement("stop", { offset: "30%", "stop-color": "#8eefff", "stop-opacity": "0.9" }),
+        createSvgElement("stop", {
+          offset: "100%",
+          "stop-color": "#2c77bb",
+          "stop-opacity": "0.7",
+        }),
       );
-      const pattern = svg("pattern", {
+      const gridPattern = createSvgElement("pattern", {
         id: "states-grid",
         width: "32",
         height: "32",
         patternUnits: "userSpaceOnUse",
       });
-      pattern.append(
-        svg("path", {
+      gridPattern.append(
+        createSvgElement("path", {
           d: "M 32 0 L 0 0 0 32",
           fill: "none",
           stroke: "#89b5ef",
@@ -208,118 +212,80 @@ function createStatesModule(): SimulationModule {
           "stroke-width": "1",
         }),
       );
-      const glow = svg("filter", {
+      const glow = createSvgElement("filter", {
         id: "states-glow",
-        x: "-100%",
-        y: "-100%",
-        width: "300%",
-        height: "300%",
+        x: "-80%",
+        y: "-80%",
+        width: "260%",
+        height: "260%",
       });
-      glow.append(svg("feGaussianBlur", { stdDeviation: "5" }));
-      defs.append(bg, chamberGradient, particleGradient, pattern, glow);
-      scene.append(defs);
+      glow.append(createSvgElement("feGaussianBlur", { stdDeviation: "5", result: "blur" }));
+      defs.append(backgroundGradient, chamberGradient, particleGradient, gridPattern, glow);
+      svg.append(defs);
 
-      const background = svg("rect", { width: "800", height: "600", fill: "url(#states-bg)" });
-      const grid = svg("rect", { width: "800", height: "600", fill: "url(#states-grid)" });
-      const frameGlow = svg("rect", {
-        x: "246",
-        y: "68",
-        width: "548",
-        height: "490",
-        rx: "24",
-        fill: "#ff6c4c",
-        "fill-opacity": "0.08",
+      const background = createSvgElement("rect", {
+        width: "800",
+        height: "600",
+        fill: "url(#states-bg)",
+      });
+      const grid = createSvgElement("rect", {
+        width: "800",
+        height: "600",
+        fill: "url(#states-grid)",
+      });
+      const chamberGlow = createSvgElement("rect", {
+        x: "248",
+        y: "70",
+        width: "544",
+        height: "480",
+        rx: "22",
+        fill: "#5f8cff",
+        "fill-opacity": "0.07",
         filter: "url(#states-glow)",
       });
-      const chamber = svg("rect", {
+      const chamber = createSvgElement("rect", {
         x: "260",
         y: "82",
         width: "520",
         height: "456",
         rx: "18",
         fill: "url(#states-chamber)",
-        stroke: "#9ccfee",
-        "stroke-opacity": "0.55",
+        stroke: "#98c4e6",
+        "stroke-opacity": "0.5",
         "stroke-width": "2",
       });
-      const chamberTop = svg("path", {
+      const chamberTop = createSvgElement("path", {
         d: "M 278 82 L 762 82 L 780 104 L 260 104 Z",
         fill: "#c6e9ff",
         "fill-opacity": "0.06",
         stroke: "#b6e4ff",
         "stroke-opacity": "0.24",
       });
-      const chamberBase = svg("path", {
+      const chamberBase = createSvgElement("path", {
         d: "M 260 538 L 780 538 L 762 554 L 278 554 Z",
         fill: "#08111d",
         stroke: "#a9d5eb",
         "stroke-opacity": "0.28",
       });
-      const innerFrame = svg("rect", {
-        x: "284",
+      const volumeGuide = createSvgElement("rect", {
+        x: "285",
         y: "112",
-        width: "472",
-        height: "394",
+        width: "470",
+        height: "395",
         rx: "10",
         fill: "none",
         stroke: "#91c9e4",
-        "stroke-opacity": "0.16",
+        "stroke-opacity": "0.14",
         "stroke-dasharray": "4 9",
       });
-      const liquidShade = svg("path", { fill: material.tint, "fill-opacity": "0" });
-      const liquidSurface = svg("path", {
+      const liquidSurface = createSvgElement("path", {
         fill: "none",
-        stroke: material.accent,
-        "stroke-width": "2.2",
-        "stroke-opacity": "0",
-      });
-      const iceFrame = svg("path", {
-        d: "M 386 426 Q 520 407 654 426 L 654 498 Q 520 512 386 498 Z",
-        fill: "none",
-        stroke: "#a9f1ff",
-        "stroke-opacity": "0",
+        stroke: "#84e8ff",
         "stroke-width": "2",
+        "stroke-opacity": "0.72",
       });
-      const iceCracks = svg("g", {
-        fill: "none",
-        stroke: "#c1f6ff",
-        "stroke-opacity": "0",
-        "stroke-width": "1.4",
-      });
-      iceCracks.append(
-        svg("path", { d: "M 430 432 l 28 17 l -12 22 l 32 20" }),
-        svg("path", { d: "M 564 421 l -18 28 l 22 20 l -10 22" }),
-        svg("path", { d: "M 622 435 l -20 20 l 10 24" }),
-      );
-      const attractionLayer = svg("g", {});
-      const trailLayer = svg("g", {});
-      const particleLayer = svg("g", {});
-      const particleGlows = particles.map(() =>
-        svg("circle", {
-          r: "12",
-          fill: "#65dcff",
-          "fill-opacity": "0.14",
-          filter: "url(#states-glow)",
-        }),
-      );
-      const particleNodes = particles.map(() =>
-        svg("circle", { r: "6", fill: "url(#states-particle)" }),
-      );
-      const particleTrails = particles.map(() =>
-        svg("line", { stroke: "#f4bd6c", "stroke-width": "1.2", "stroke-opacity": "0" }),
-      );
-      particleTrails.forEach((node) => trailLayer.append(node));
-      particleGlows.forEach((node) => particleLayer.append(node));
-      particleNodes.forEach((node) => particleLayer.append(node));
-      const gasHint = svg("text", {
-        x: "304",
-        y: "144",
-        fill: "#f4c573",
-        "font-family": "ui-monospace, SFMono-Regular, Menlo, monospace",
-        "font-size": "10",
-        "letter-spacing": "1.5",
-      });
-      const liquidLabel = svg("text", {
+      const liquidShade = createSvgElement("path", { fill: "#48bee4", "fill-opacity": "0.14" });
+      const liquidLabel = createSvgElement("text", {
         x: "304",
         y: "344",
         fill: "#b8f4ff",
@@ -327,61 +293,76 @@ function createStatesModule(): SimulationModule {
         "font-size": "10",
         "letter-spacing": "1.5",
       });
-      const info = svg("g", {
-        fill: "#dbf7ff",
-        "font-family": "ui-monospace, SFMono-Regular, Menlo, monospace",
-      });
-      const infoTitle = svg("text", {
-        x: "32",
-        y: "48",
-        fill: "#7ce7ff",
-        "font-size": "13",
-        "letter-spacing": "2.8",
-      });
-      infoTitle.textContent = "MOLECULAR CHAMBER / LIVE MODEL";
-      const infoMaterial = svg("text", { x: "32", y: "76", "font-size": "12" });
-      const infoTemp = svg("text", { x: "32", y: "99", "font-size": "12" });
-      const infoMelting = svg("text", { x: "32", y: "122", "font-size": "12" });
-      const infoBoiling = svg("text", { x: "32", y: "145", "font-size": "12" });
-      const infoEnergy = svg("text", { x: "32", y: "168", "font-size": "12", fill: "#f5c16c" });
-      const infoMotion = svg("text", { x: "32", y: "191", "font-size": "11", fill: "#9fc9df" });
-      info.append(
-        infoTitle,
-        infoMaterial,
-        infoTemp,
-        infoMelting,
-        infoBoiling,
-        infoEnergy,
-        infoMotion,
-      );
-      const legend = svg("text", {
+      const gasHint = createSvgElement("text", {
         x: "304",
-        y: "118",
-        fill: "#9ccfe5",
+        y: "144",
+        fill: "#f3c677",
         "font-family": "ui-monospace, SFMono-Regular, Menlo, monospace",
         "font-size": "10",
-        "letter-spacing": "1.4",
+        "letter-spacing": "1.5",
       });
-      const phaseBadge = svg("rect", {
-        x: "620",
-        y: "104",
-        width: "138",
-        height: "28",
-        rx: "14",
-        fill: "#07111d",
-        stroke: "#86eaff",
+      const gasArrows = createSvgElement("g", {
+        stroke: "#f1c26e",
+        "stroke-opacity": "0.52",
+        fill: "none",
+      });
+      gasArrows.append(
+        createSvgElement("path", { d: "M 712 196 l 0 -18 m 0 -0 l -4 7 m 4 -7 l 4 7" }),
+        createSvgElement("path", { d: "M 736 238 l 0 -18 m 0 -0 l -4 7 m 4 -7 l 4 7" }),
+      );
+      const iceBlock = createSvgElement("path", {
+        d: "M 390 415 Q 520 398 650 415 L 650 498 Q 520 510 390 498 Z",
+        fill: "#94eaff",
+        "fill-opacity": "0.13",
+        stroke: "#a8f1ff",
+        "stroke-opacity": "0.36",
+        "stroke-width": "2",
+      });
+      const iceCracks = createSvgElement("g", {
+        stroke: "#b9f5ff",
         "stroke-opacity": "0.35",
+        fill: "none",
+        "stroke-width": "1.5",
       });
-      const phaseBadgeText = svg("text", {
-        x: "689",
-        y: "122",
-        fill: "#8eeeff",
-        "font-family": "ui-monospace, SFMono-Regular, Menlo, monospace",
-        "font-size": "10",
-        "text-anchor": "middle",
-        "letter-spacing": "1.4",
+      iceCracks.append(
+        createSvgElement("path", { d: "M 430 432 l 24 18 l -9 21 l 28 18" }),
+        createSvgElement("path", { d: "M 570 424 l -18 26 l 18 18 l -8 22" }),
+        createSvgElement("path", { d: "M 622 438 l -20 17 l 8 22" }),
+      );
+      const attractionLayer = createSvgElement("g", {});
+      const thermalLeft = createSvgElement("rect", {
+        x: "260",
+        y: "116",
+        width: "18",
+        height: "390",
+        rx: "9",
+        fill: "#ff684c",
+        "fill-opacity": "0",
       });
-      const statusPanel = svg("rect", {
+      const thermalRight = createSvgElement("rect", {
+        x: "762",
+        y: "116",
+        width: "18",
+        height: "390",
+        rx: "9",
+        fill: "#ff684c",
+        "fill-opacity": "0",
+      });
+      const particleLayer = createSvgElement("g", {});
+      const particleGlows = particles.map(() =>
+        createSvgElement("circle", {
+          r: "12",
+          fill: "#5edbff",
+          "fill-opacity": "0.16",
+          filter: "url(#states-glow)",
+        }),
+      );
+      const particleNodes = particles.map(() =>
+        createSvgElement("circle", { r: "6", fill: "url(#states-particle)" }),
+      );
+      particleGlows.forEach((node) => particleLayer.append(node));
+      particleNodes.forEach((node) => particleLayer.append(node));
+      const statusPanel = createSvgElement("rect", {
         x: "32",
         y: "398",
         width: "204",
@@ -392,7 +373,7 @@ function createStatesModule(): SimulationModule {
         stroke: "#8bbbe4",
         "stroke-opacity": "0.3",
       });
-      const statusLabel = svg("text", {
+      const statusLabel = createSvgElement("text", {
         x: "52",
         y: "428",
         fill: "#78e6ff",
@@ -400,7 +381,7 @@ function createStatesModule(): SimulationModule {
         "font-size": "11",
         "letter-spacing": "2",
       });
-      const statusValue = svg("text", {
+      const statusValue = createSvgElement("text", {
         x: "52",
         y: "459",
         fill: "#eefaff",
@@ -408,14 +389,14 @@ function createStatesModule(): SimulationModule {
         "font-size": "24",
         "font-weight": "700",
       });
-      const statusDetail = svg("text", {
+      const statusDetail = createSvgElement("text", {
         x: "52",
         y: "486",
         fill: "#a8cadc",
         "font-family": "ui-monospace, SFMono-Regular, Menlo, monospace",
         "font-size": "10",
       });
-      const statusDirection = svg("text", {
+      const statusDirection = createSvgElement("text", {
         x: "52",
         y: "514",
         fill: "#89bbd5",
@@ -423,126 +404,147 @@ function createStatesModule(): SimulationModule {
         "font-size": "10",
         "letter-spacing": "1.2",
       });
-      scene.append(
+      const info = createSvgElement("g", {
+        fill: "#dbf7ff",
+        "font-family": "ui-monospace, SFMono-Regular, Menlo, monospace",
+      });
+      const infoTitle = createSvgElement("text", {
+        x: "32",
+        y: "48",
+        fill: "#7ce7ff",
+        "font-size": "13",
+        "letter-spacing": "2.8",
+      });
+      infoTitle.textContent = "MOLECULAR CHAMBER / LIVE MODEL";
+      const infoMaterial = createSvgElement("text", { x: "32", y: "76", "font-size": "12" });
+      const infoTemp = createSvgElement("text", { x: "32", y: "99", "font-size": "12" });
+      const infoMelting = createSvgElement("text", { x: "32", y: "122", "font-size": "12" });
+      const infoBoiling = createSvgElement("text", { x: "32", y: "145", "font-size": "12" });
+      const infoEnergy = createSvgElement("text", {
+        x: "32",
+        y: "168",
+        "font-size": "12",
+        fill: "#f5c16c",
+      });
+      const infoMotion = createSvgElement("text", {
+        x: "32",
+        y: "191",
+        "font-size": "11",
+        fill: "#9fc9df",
+      });
+      info.append(
+        infoTitle,
+        infoMaterial,
+        infoTemp,
+        infoMelting,
+        infoBoiling,
+        infoEnergy,
+        infoMotion,
+      );
+      const legend = createSvgElement("text", {
+        x: "290",
+        y: "118",
+        fill: "#9ccfe5",
+        "font-family": "ui-monospace, SFMono-Regular, Menlo, monospace",
+        "font-size": "10",
+        "letter-spacing": "1.4",
+      });
+      const phaseBadge = createSvgElement("rect", {
+        x: "620",
+        y: "104",
+        width: "138",
+        height: "28",
+        rx: "14",
+        fill: "#07111d",
+        stroke: "#86eaff",
+        "stroke-opacity": "0.35",
+      });
+      const phaseBadgeText = createSvgElement("text", {
+        x: "689",
+        y: "122",
+        fill: "#8eeeff",
+        "font-family": "ui-monospace, SFMono-Regular, Menlo, monospace",
+        "font-size": "10",
+        "text-anchor": "middle",
+        "letter-spacing": "1.4",
+      });
+      const temperatureGlow = createSvgElement("rect", {
+        x: "272",
+        y: "94",
+        width: "496",
+        height: "420",
+        rx: "14",
+        fill: "#ff774c",
+        "fill-opacity": "0",
+        pointerEvents: "none",
+      });
+
+      svg.append(
         background,
         grid,
-        frameGlow,
+        chamberGlow,
         chamber,
         chamberTop,
         chamberBase,
-        innerFrame,
+        volumeGuide,
+        thermalLeft,
+        thermalRight,
         liquidShade,
-        liquidSurface,
-        iceFrame,
+        iceBlock,
         iceCracks,
-        gasHint,
+        liquidSurface,
         liquidLabel,
-        trailLayer,
-        attractionLayer,
-        particleLayer,
+        gasHint,
+        gasArrows,
+        temperatureGlow,
         info,
         legend,
         phaseBadge,
         phaseBadgeText,
+        attractionLayer,
+        particleLayer,
         statusPanel,
         statusLabel,
         statusValue,
         statusDetail,
         statusDirection,
       );
-      root.append(scene);
+      root.append(svg);
 
-      function phaseFromTemperature(): number {
-        if (temperature <= material.melting - 8) return 0;
-        if (temperature < material.melting + 8)
-          return clamp((temperature - (material.melting - 8)) / 16, 0, 1);
-        if (temperature < material.boiling - 10) return 1;
-        if (temperature < material.boiling + 10)
-          return 1 + clamp((temperature - (material.boiling - 10)) / 20, 0, 1);
+      function phaseValue(): number {
+        const melt = material.melting;
+        const boil = material.boiling;
+        if (temperature < melt - 8) return 0;
+        if (temperature < melt + 8) return clamp((temperature - (melt - 8)) / 16, 0, 1);
+        if (temperature < boil - 10) return 1;
+        if (temperature < boil + 10) return 1 + clamp((temperature - (boil - 10)) / 20, 0, 1);
         return 2;
       }
 
-      function targetPhase(): number {
-        if (actionMode === "melting") return 1;
-        if (actionMode === "boiling") return 2;
-        return phaseFromTemperature();
-      }
-
-      function solidPosition(index: number): { x: number; y: number } {
-        return { x: 405 + (index % 10) * 23, y: 428 + Math.floor(index / 10) * 9.5 };
-      }
-
-      function liquidPosition(
-        index: number,
-        liquidTop: number,
-        time: number,
-      ): { x: number; y: number } {
-        const depth = Math.max(28, CHAMBER.bottom - liquidTop - 20);
-        return {
-          x: 318 + ((index * 43) % 410) + Math.sin(time * 1.4 + index) * 6,
-          y: liquidTop + 16 + ((index * 29) % depth) + Math.cos(time * 1.1 + index * 0.7) * 5,
-        };
-      }
-
-      function resetEscapes() {
-        particles.forEach((particle) => {
-          particle.escaped = false;
-          particle.gasX = 304 + ((particle.seed * 61) % 432);
-          particle.gasY = 122 + ((particle.seed * 47) % 370);
-          particle.gasVX = 18 + ((particle.seed * 13) % 30);
-          particle.gasVY = -32 - ((particle.seed * 19) % 24);
-        });
-      }
-
       function phaseStatus(): { label: string; detail: string; value: number; color: string } {
-        const target = targetPhase();
-        const delta = target - visualPhase;
-        if (actionMode === "melting" || (delta > 0.08 && target < 1.5))
-          return { label: "MELTING", detail: "Ice → Water", value: visualPhase, color: "#f2bd67" };
-        if (actionMode === "boiling" || (delta > 0.08 && target > 1.5))
-          return {
-            label: "BOILING",
-            detail: "Water → Vapour",
-            value: visualPhase,
-            color: "#ff9a62",
-          };
-        if (delta < -0.08 && target > 1.5)
-          return {
-            label: "CONDENSATION",
-            detail: "Vapour → Water",
-            value: visualPhase,
-            color: "#8fdcff",
-          };
-        if (delta < -0.08 && target < 0.5)
-          return { label: "FREEZING", detail: "Water → Ice", value: visualPhase, color: "#8fdcff" };
-        if (visualPhase < 0.5)
-          return {
-            label: "SOLID",
-            detail: "Ice crystal lattice",
-            value: visualPhase,
-            color: "#8fdcff",
-          };
-        if (visualPhase < 1.5)
-          return {
-            label: "LIQUID",
-            detail: "Contained water volume",
-            value: visualPhase,
-            color: "#73e4ff",
-          };
-        return {
-          label: "GAS",
-          detail: "Water vapour diffusion",
-          value: visualPhase,
-          color: "#f5c16c",
-        };
+        const target = phaseValue();
+        const value = visualPhase;
+        const transition = Math.abs(target - value) > 0.06;
+        if (transition && target > value + 0.06) {
+          return target > 1.45
+            ? { label: "BOILING", detail: "Liquid → Vapour", value, color: "#ff9a62" }
+            : { label: "MELTING", detail: "Ice → Water", value, color: "#f2bd67" };
+        }
+        if (transition && target < value - 0.06) {
+          return target < 0.5
+            ? { label: "FREEZING", detail: "Water → Ice", value, color: "#8fdcff" }
+            : { label: "CONDENSATION", detail: "Vapour → Water", value, color: "#8fdcff" };
+        }
+        if (value < 0.5)
+          return { label: "SOLID", detail: "Ice crystal lattice", value, color: "#8fdcff" };
+        if (value < 1.5)
+          return { label: "LIQUID", detail: "Contained water volume", value, color: "#73e4ff" };
+        return { label: "GAS", detail: "Water vapour diffusion", value, color: "#f5c16c" };
       }
 
       function energyLabel(): string {
-        const normalized = clamp(
-          (temperature - material.melting) / Math.max(1, material.boiling - material.melting),
-          0,
-          1.8,
-        );
+        const span = material.boiling - material.melting;
+        const normalized = clamp((temperature - material.melting) / span, 0, 1.8);
         if (normalized < 0.3) return "LOW";
         if (normalized < 0.85) return "MEDIUM";
         if (normalized < 1.35) return "HIGH";
@@ -550,124 +552,126 @@ function createStatesModule(): SimulationModule {
       }
 
       function particleColor(): string {
-        const normalized = clamp(
+        const warm = clamp(
           (temperature - material.melting) / Math.max(1, material.boiling - material.melting),
           0,
           1,
         );
-        if (normalized > 0.78) return "#ff9a67";
-        if (normalized > 0.45) return "#f4c86e";
+        if (warm > 0.78) return "#ff9a67";
+        if (warm > 0.45) return "#f4c86e";
         return material.accent;
       }
 
-      function wavePath(time: number, top: number): string {
+      function wavePath(time: number): string {
+        const phase = time * 1.5;
         const points: string[] = [];
         for (let x = CHAMBER.left + 8; x <= CHAMBER.right - 8; x += 12) {
-          const y =
-            top + Math.sin(x * 0.035 + time * 1.5) * 4 + Math.sin(x * 0.011 + time * 0.55) * 2;
+          const y = 350 + Math.sin(x * 0.035 + phase) * 4 + Math.sin(x * 0.011 + phase * 0.55) * 2;
           points.push(`${x === CHAMBER.left + 8 ? "M" : "L"} ${x} ${y}`);
         }
         return points.join(" ");
       }
 
-      function updateAttractions(phase: number, opacity: number) {
+      function liquidPath(time: number): string {
+        return `${wavePath(time)} L ${CHAMBER.right - 8} ${CHAMBER.bottom} L ${CHAMBER.left + 8} ${CHAMBER.bottom} Z`;
+      }
+
+      function solidPosition(index: number): { x: number; y: number } {
+        const column = index % 12;
+        const row = Math.floor(index / 12);
+        return { x: 412 + column * 18, y: 424 + row * 13 };
+      }
+
+      function liquidPosition(index: number): { x: number; y: number } {
+        return {
+          x: 316 + ((index * 47) % 408),
+          y: 382 + ((index * 31) % 112),
+        };
+      }
+
+      function updateAttractions(phase: number, temperatureGlowAmount: number) {
         attractionLayer.replaceChildren();
-        const show = clamp((1 - phase) * opacity, 0, 0.55);
-        for (let row = 0; row < 9; row += 1) {
-          for (let column = 0; column < 9; column += 1) {
-            const index = row * 10 + column;
+        const show = clamp((1 - phase) * 0.74 - temperatureGlowAmount * 0.15, 0, 0.7);
+        const solidColumns = 12;
+        const solidRows = 6;
+        for (let row = 0; row < solidRows; row += 1) {
+          for (let column = 0; column < solidColumns - 1; column += 1) {
+            const index = row * solidColumns + column;
+            const next = index + 1;
             const start = solidPosition(index);
-            const end = solidPosition(index + 1);
-            attractionLayer.append(
-              svg("line", {
-                x1: String(start.x),
-                y1: String(start.y),
-                x2: String(end.x),
-                y2: String(end.y),
-                stroke: particleColor(),
-                "stroke-opacity": String(show),
-                "stroke-width": "1",
-                "stroke-dasharray": phase > 0.4 ? "2 5" : "none",
-              }),
-            );
+            const end = solidPosition(next);
+            const line = createSvgElement("line", {
+              x1: String(start.x),
+              y1: String(start.y),
+              x2: String(end.x),
+              y2: String(end.y),
+              stroke: particleColor(),
+              "stroke-opacity": String(show),
+              "stroke-width": "1.2",
+              "stroke-dasharray": phase > 0.35 ? "2 5" : "none",
+            });
+            attractionLayer.append(line);
           }
         }
       }
 
-      function updateParticles(time: number, step: number, phase: number, liquidAmount: number) {
-        const liquidProgress = clamp(phase, 0, 1);
-        const gasProgress = clamp(phase - 1, 0, 1);
-        const energy = clamp(
+      function updateParticles(time: number, step: number, phase: number) {
+        const liquidMix = clamp(phase, 0, 1);
+        const gasMix = clamp(phase - 1, 0, 1);
+        const temperatureEnergy = clamp(
           (temperature - material.melting) / Math.max(1, material.boiling - material.melting),
           0,
           1.6,
         );
-        const speed = 0.5 + energy * 2.2;
-        const liquidTop = CHAMBER.bottom - 176 * liquidAmount;
-        const escapedLimit = gasProgress * (PARTICLE_COUNT + 8);
+        const speed = 0.5 + temperatureEnergy * 1.9;
         particles.forEach((particle, index) => {
-          const solid = solidPosition(index);
-          const fluid = liquidPosition(index, liquidTop, time);
-          const vibration = 1.4 + energy * 8.5;
-          const solidX =
-            solid.x + Math.sin(time * (2.4 + particle.seed * 0.025) + particle.seed) * vibration;
-          const solidY =
-            solid.y +
-            Math.cos(time * (2.1 + particle.seed * 0.02) + particle.seed * 0.7) * vibration;
-          const liquidX = fluid.x + Math.sin(time * speed + particle.seed) * (3 + energy * 10);
+          const vibration = 1.5 + temperatureEnergy * 9;
+          const lattice = solidPosition(index);
+          const fluid = liquidPosition(index);
+          const latticeX =
+            lattice.x + Math.sin(time * (2.2 + particle.seed * 0.03) + particle.seed) * vibration;
+          const latticeY =
+            lattice.y +
+            Math.cos(time * (2.0 + particle.seed * 0.025) + particle.seed * 0.7) * vibration;
+          const liquidX =
+            fluid.x + Math.sin(time * speed + particle.seed * 0.4) * (8 + temperatureEnergy * 18);
           const liquidY =
-            fluid.y + Math.cos(time * speed * 0.8 + particle.seed * 0.6) * (3 + energy * 7);
-          const escaping = index < escapedLimit;
-          if (escaping && !particle.escaped) {
-            particle.escaped = true;
-            particle.gasX = liquidX;
-            particle.gasY = liquidTop - 3;
-            particle.gasVY = -28 - (particle.seed % 24);
+            fluid.y + Math.cos(time * speed * 0.72 + particle.seed) * (6 + temperatureEnergy * 12);
+          particle.gasX += particle.gasVX * step * speed;
+          particle.gasY += particle.gasVY * step * speed;
+          if (particle.gasX < CHAMBER.left + 24 || particle.gasX > CHAMBER.right - 24) {
+            particle.gasVX *= -1;
+            particle.gasX = clamp(particle.gasX, CHAMBER.left + 24, CHAMBER.right - 24);
           }
-          if (particle.escaped) {
-            particle.gasX += particle.gasVX * step * speed;
-            particle.gasY += particle.gasVY * step * speed;
-            particle.gasVY += 5 * step;
-            if (particle.gasX < CHAMBER.left + 25 || particle.gasX > CHAMBER.right - 25)
-              particle.gasVX *= -1;
-            if (particle.gasY < CHAMBER.top + 35 || particle.gasY > CHAMBER.bottom - 25)
-              particle.gasVY *= -1;
+          if (particle.gasY < CHAMBER.top + 34 || particle.gasY > CHAMBER.bottom - 24) {
+            particle.gasVY *= -1;
+            particle.gasY = clamp(particle.gasY, CHAMBER.top + 34, CHAMBER.bottom - 24);
           }
-          const gasX = particle.gasX;
-          const gasY = particle.gasY;
-          const gasWeight = gasProgress * (particle.escaped ? 1 : 0);
-          const liquidWeight = liquidProgress * (1 - gasWeight);
-          const solidWeight = 1 - liquidWeight - gasWeight;
-          const total = Math.max(1, solidWeight + liquidWeight + gasWeight);
-          const x = (solidX * solidWeight + liquidX * liquidWeight + gasX * gasWeight) / total;
-          const y = (solidY * solidWeight + liquidY * liquidWeight + gasY * gasWeight) / total;
-          const radius = (4.5 + energy * 1.2) * (0.8 + particle.z * 0.3);
+          const mixedLiquidX = latticeX * (1 - liquidMix) + liquidX * liquidMix;
+          const mixedLiquidY = latticeY * (1 - liquidMix) + liquidY * liquidMix;
+          const x = mixedLiquidX * (1 - gasMix) + particle.gasX * gasMix;
+          const y = mixedLiquidY * (1 - gasMix) + particle.gasY * gasMix;
+          const depthScale = 0.78 + particle.z * 0.34;
+          const radius = (4.8 + temperatureEnergy * 1.4) * depthScale;
+          const opacity = 0.5 + particle.z * 0.45;
           const glow = particleGlows[index];
           const node = particleNodes[index];
-          const trail = particleTrails[index];
           glow?.setAttribute("cx", String(x));
           glow?.setAttribute("cy", String(y));
           glow?.setAttribute("r", String(radius * 2.2));
           glow?.setAttribute("fill", particleColor());
-          glow?.setAttribute("fill-opacity", String(0.09 + energy * 0.1));
+          glow?.setAttribute("fill-opacity", String(0.1 + temperatureEnergy * 0.11));
           node?.setAttribute("cx", String(x));
           node?.setAttribute("cy", String(y));
           node?.setAttribute("r", String(radius));
-          node?.setAttribute("fill-opacity", String(0.55 + particle.z * 0.4));
-          if (particle.escaped && gasProgress > 0) {
-            trail?.setAttribute("x1", String(x));
-            trail?.setAttribute("y1", String(y));
-            trail?.setAttribute("x2", String(x - particle.gasVX * 0.18));
-            trail?.setAttribute("y2", String(y - particle.gasVY * 0.18));
-            trail?.setAttribute("stroke-opacity", String(0.12 + gasProgress * 0.22));
-          } else {
-            trail?.setAttribute("stroke-opacity", "0");
-          }
+          node?.setAttribute("fill", "url(#states-particle)");
+          node?.setAttribute("fill-opacity", String(opacity));
         });
       }
 
-      function publishMeasurements() {
+      function updateMeasurements() {
         const status = phaseStatus();
+        const energy = energyLabel();
         host.publishMeasurements([
           { id: "material", label: "Material", value: material.label },
           {
@@ -693,41 +697,28 @@ function createStatesModule(): SimulationModule {
             precision: 0,
           },
           { id: "phase", label: "Current phase", value: status.label },
-          { id: "molecular-energy", label: "Molecular energy", value: energyLabel() },
+          { id: "molecular-energy", label: "Molecular energy", value: energy },
           { id: "thermal-trend", label: "Heating / cooling", value: trend },
         ]);
         const detail =
           status.label === "SOLID"
-            ? "Packed ice molecules vibrate around fixed crystal positions. As heating increases, the lattice deforms into flowing water."
+            ? "Particles are closely packed and vibrate around fixed positions. Strong attractions keep the lattice organized."
             : status.label === "LIQUID"
-              ? "Water molecules are contained below the surface and slide past one another. Heating sends the most energetic molecules toward escape."
+              ? "Particles remain close together but move past one another, allowing the substance to flow."
               : status.label === "GAS"
-                ? "Water vapour molecules are widely separated, moving rapidly and colliding with the chamber walls."
-                : status.label === "BOILING"
-                  ? "Energetic molecules escape through the surface one by one. The water level falls as the vapour population grows."
-                  : status.label === "MELTING"
-                    ? "The ice lattice is deforming. Stronger vibration lets molecules leave fixed positions and form a liquid flow."
-                    : status.label === "CONDENSATION"
-                      ? "Vapour molecules slow down and descend, clustering into the growing water region."
-                      : "Cooling reduces molecular motion and allows the liquid particles to organize into an ice crystal.";
+                ? "Particles are widely separated and move rapidly in all directions, allowing diffusion throughout the chamber."
+                : status.label === "BOILING" || status.label === "EVAPORATION"
+                  ? "Particles have enough kinetic energy to escape the liquid surface and spread through the chamber."
+                  : "Heating or cooling is changing molecular freedom. The ordered structure is reorganizing smoothly.";
         host.publishExplanation({ whatsHappening: detail });
       }
 
       function updateReadout(time: number) {
+        const targetPhase = phaseValue();
         const status = phaseStatus();
         const energy = energyLabel();
-        const normalized = clamp(
+        const glowAmount = clamp(
           (temperature - material.melting) / Math.max(1, material.boiling - material.melting),
-          0,
-          1.4,
-        );
-        const liquidProgress = clamp(visualPhase, 0, 1);
-        const gasProgress = clamp(visualPhase - 1, 0, 1);
-        const liquidAmount = liquidProgress * (1 - gasProgress);
-        const liquidTop = CHAMBER.bottom - 176 * liquidAmount;
-        const hot = clamp(normalized, 0, 1);
-        const cold = clamp(
-          (material.melting - temperature) / Math.max(1, Math.abs(material.melting) + 40),
           0,
           1,
         );
@@ -738,11 +729,11 @@ function createStatesModule(): SimulationModule {
         infoEnergy.textContent = `MOLECULAR ENERGY ${energy}`;
         infoMotion.textContent = `THERMAL TREND   ${trend}`;
         legend.textContent =
-          visualPhase < 0.5
-            ? "ICE / PACKED CRYSTAL"
-            : visualPhase < 1.5
-              ? "WATER / FLOWING VOLUME"
-              : "VAPOUR / DIFFUSION";
+          status.value < 0.6
+            ? "LATTICE / VIBRATION"
+            : status.value < 1.5
+              ? "FLOW / CLOSE RANGE"
+              : "DIFFUSION / HIGH ENERGY";
         phaseBadgeText.textContent = status.label;
         phaseBadge.setAttribute("stroke", status.color);
         phaseBadgeText.setAttribute("fill", status.color);
@@ -751,24 +742,58 @@ function createStatesModule(): SimulationModule {
         statusDetail.textContent = status.detail;
         statusDirection.textContent = `${format(temperature, 0)}°C  ·  ${energy} ENERGY`;
         statusValue.setAttribute("fill", status.color);
-        frameGlow.setAttribute("fill", hot > cold ? "#ff684c" : "#50c7ff");
-        frameGlow.setAttribute("fill-opacity", String(0.035 + Math.max(hot, cold) * 0.14));
-        liquidShade.setAttribute(
-          "d",
-          `${wavePath(time, liquidTop)} L ${CHAMBER.right - 8} ${CHAMBER.bottom} L ${CHAMBER.left + 8} ${CHAMBER.bottom} Z`,
+        temperatureGlow.setAttribute(
+          "fill",
+          temperature >= material.boiling
+            ? "#ff754e"
+            : temperature >= material.melting
+              ? "#f4b45e"
+              : "#58bde8",
         );
-        liquidShade.setAttribute("fill", material.tint);
-        liquidShade.setAttribute("fill-opacity", String(liquidAmount * 0.18));
-        liquidSurface.setAttribute("d", wavePath(time, liquidTop));
+        temperatureGlow.setAttribute("fill-opacity", String(0.015 + glowAmount * 0.06));
+        const liquidProgress = clamp(visualPhase, 0, 1);
+        const gasProgress = clamp(visualPhase - 1, 0, 1);
+        const liquidAmount = liquidProgress * (1 - gasProgress);
+        const gasAmount = gasProgress;
+        const solidAmount = 1 - liquidProgress;
+        const hotAmount = clamp(
+          (temperature - material.melting) / Math.max(1, material.boiling - material.melting),
+          0,
+          1.4,
+        );
+        const coldAmount = clamp(
+          (material.melting - temperature) / Math.max(1, Math.abs(material.melting) + 40),
+          0,
+          1,
+        );
+        liquidSurface.setAttribute("d", wavePath(time));
         liquidSurface.setAttribute("stroke", material.accent);
-        liquidSurface.setAttribute("stroke-opacity", String(liquidAmount * 0.8));
-        iceFrame.setAttribute("stroke-opacity", String(clamp(1 - liquidProgress, 0, 1) * 0.48));
-        iceCracks.setAttribute("stroke-opacity", String(clamp(1 - liquidProgress, 0, 1) * 0.4));
-        liquidLabel.textContent = liquidAmount > 0.18 ? "WATER / LIQUID LEVEL" : "";
+        liquidSurface.setAttribute("stroke-opacity", String(liquidAmount * 0.72));
+        liquidShade.setAttribute("d", liquidPath(time));
+        liquidShade.setAttribute("fill", material.tint);
+        liquidShade.setAttribute("fill-opacity", String(liquidAmount * 0.17));
+        liquidLabel.textContent =
+          liquidAmount > 0.2
+            ? `${(material.label.split(" /")[0] ?? material.label).toUpperCase()} / LIQUID LEVEL`
+            : "";
         liquidLabel.setAttribute("opacity", String(liquidAmount));
-        gasHint.textContent = gasProgress > 0.16 ? "VAPOUR / ESCAPED MOLECULES" : "";
-        gasHint.setAttribute("opacity", String(gasProgress));
-        updateAttractions(visualPhase, 0.8);
+        gasHint.textContent = gasAmount > 0.18 ? "VAPOUR / DIFFUSION" : "";
+        gasHint.setAttribute("opacity", String(gasAmount));
+        gasArrows.setAttribute("opacity", String(gasAmount));
+        iceBlock.setAttribute("opacity", String(solidAmount));
+        iceCracks.setAttribute("opacity", String(solidAmount));
+        thermalLeft.setAttribute("fill", hotAmount > coldAmount ? "#ff654b" : "#45bfff");
+        thermalRight.setAttribute("fill", hotAmount > coldAmount ? "#ff654b" : "#45bfff");
+        thermalLeft.setAttribute(
+          "fill-opacity",
+          String(0.015 + Math.max(hotAmount, coldAmount) * 0.12),
+        );
+        thermalRight.setAttribute(
+          "fill-opacity",
+          String(0.015 + Math.max(hotAmount, coldAmount) * 0.12),
+        );
+        updateAttractions(visualPhase, glowAmount);
+        void targetPhase;
       }
 
       function publishGraph() {
@@ -783,8 +808,8 @@ function createStatesModule(): SimulationModule {
         );
         lastTimestamp = timestamp;
         if (running) {
-          const goal = targetPhase();
-          visualPhase += (goal - visualPhase) * Math.min(1, frameSeconds * 2.2);
+          const targetPhase = phaseValue();
+          visualPhase += (targetPhase - visualPhase) * Math.min(1, frameSeconds * 2.8);
           accumulator += frameSeconds;
           while (accumulator >= FIXED_STEP) {
             elapsed += FIXED_STEP;
@@ -793,28 +818,12 @@ function createStatesModule(): SimulationModule {
           uiAccumulator += frameSeconds;
           if (uiAccumulator >= 1 / 15) {
             publishGraph();
-            publishMeasurements();
+            updateMeasurements();
             uiAccumulator = 0;
           }
-          if (actionMode === "melting" && visualPhase > 0.995) {
-            visualPhase = 1;
-            actionMode = null;
-            running = false;
-            host.setRunning(false);
-          }
-          if (actionMode === "boiling" && visualPhase > 1.995) {
-            visualPhase = 2;
-            actionMode = null;
-            running = false;
-            host.setRunning(false);
-          }
         }
-        updateParticles(
-          elapsed,
-          running ? frameSeconds : 0,
-          visualPhase,
-          clamp(visualPhase, 0, 1) * (1 - clamp(visualPhase - 1, 0, 1)),
-        );
+        const status = phaseStatus();
+        updateParticles(elapsed, running ? frameSeconds : 0, visualPhase);
         updateReadout(elapsed);
         animationFrame = requestAnimationFrame(frame);
       }
@@ -823,13 +832,10 @@ function createStatesModule(): SimulationModule {
         elapsed = 0;
         accumulator = 0;
         uiAccumulator = 0;
-        actionMode = null;
         running = false;
-        visualPhase = phaseFromTemperature();
-        resetEscapes();
+        visualPhase = phaseValue();
         host.replaceGraphData([]);
-        host.setRunning(false);
-        publishMeasurements();
+        updateMeasurements();
         updateReadout(0);
       }
 
@@ -838,16 +844,12 @@ function createStatesModule(): SimulationModule {
         const delta = temperature - previousTemperature;
         trend = delta > 0.2 ? "HEATING" : delta < -0.2 ? "COOLING" : "STABLE";
         previousTemperature = temperature;
-        actionMode = null;
-        resetEscapes();
-        publishMeasurements();
+        updateMeasurements();
         updateReadout(elapsed);
       }
 
       applyParams();
-      resetEscapes();
-      updateParticles(0, 0, visualPhase, clamp(visualPhase, 0, 1));
-      updateReadout(0);
+      updateParticles(0, 0, phaseStatus().value);
       animationFrame = requestAnimationFrame(frame);
 
       return {
@@ -862,10 +864,13 @@ function createStatesModule(): SimulationModule {
         },
         reset() {
           resetState();
+          host.setRunning(false);
         },
         resize(nextWidth, nextHeight) {
-          root.style.width = `${nextWidth}px`;
-          root.style.height = `${nextHeight}px`;
+          width = nextWidth;
+          height = nextHeight;
+          root.style.width = `${width}px`;
+          root.style.height = `${height}px`;
         },
         setParam(id: string, value: ParamValue) {
           params = { ...params, [id]: value };
@@ -878,21 +883,14 @@ function createStatesModule(): SimulationModule {
           temperature = numberParam(params, "temperature", DEFAULTS.temperature);
           previousTemperature = temperature;
           substanceId = stringParam(params, "substance", DEFAULTS.substance);
-          material = MATERIALS[substanceId] ?? MATERIALS["water"]!;
+          applyParams();
           resetState();
-        },
-        onAction(actionId: string) {
-          if (actionId !== "melting" && actionId !== "boiling") return;
-          actionMode = actionId;
-          visualPhase = actionId === "melting" ? 0 : 1;
-          resetEscapes();
-          running = true;
-          lastTimestamp = performance.now();
-          host.setRunning(true);
         },
         destroy() {
           cancelAnimationFrame(animationFrame);
           container.replaceChildren();
+          void width;
+          void height;
         },
       };
     },
