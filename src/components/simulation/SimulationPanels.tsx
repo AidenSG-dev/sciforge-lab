@@ -63,6 +63,13 @@ export function SimulationViewport({
   };
   const state = copy[status] ?? copy.idle;
   const Icon = state.icon;
+  const normalizedCellType = cellType?.trim().toLowerCase();
+  const selectedCellModel =
+    normalizedCellType === "plant" || normalizedCellType === "plant cell"
+      ? "plant"
+      : normalizedCellType === "animal" || normalizedCellType === "animal cell"
+        ? "animal"
+        : null;
   return (
     <section className="panel overflow-hidden">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -80,17 +87,17 @@ export function SimulationViewport({
         className="relative m-3 overflow-hidden rounded-lg border border-border bg-[color-mix(in_oklch,var(--surface-0)_84%,var(--subject)_16%)]"
         style={{ aspectRatio }}
       >
-        {simulationId === "biology-cell" && (cellType === "animal" || cellType === "plant") ? (
+        {simulationId === "biology-cell" && selectedCellModel !== null ? (
           <div className="absolute inset-0 bg-background">
             <iframe
-              key={cellType}
+              key={selectedCellModel}
               title={
-                cellType === "plant"
+                selectedCellModel === "plant"
                   ? "Eukaryotic Plant Cell 3D model by jlf_illustration on Sketchfab"
                   : "Animal Cell 3D model by aremay on Sketchfab"
               }
               src={
-                cellType === "plant"
+                selectedCellModel === "plant"
                   ? "https://sketchfab.com/models/f258c65762e5435c9d58c1aa136b557a/embed?autospin=1"
                   : "https://sketchfab.com/models/0b15c013059844d7a26c1f16752f8b61/embed"
               }
@@ -101,7 +108,7 @@ export function SimulationViewport({
             />
             <a
               href={
-                cellType === "plant"
+                selectedCellModel === "plant"
                   ? "https://sketchfab.com/3d-models/eukaryotic-plant-cell-f258c65762e5435c9d58c1aa136b557a"
                   : "https://sketchfab.com/3d-models/animal-cell-0b15c013059844d7a26c1f16752f8b61"
               }
@@ -109,7 +116,7 @@ export function SimulationViewport({
               rel="noreferrer"
               className="absolute bottom-2 left-2 rounded bg-black/70 px-2 py-1 font-mono text-[10px] text-white/80 backdrop-blur transition-colors hover:text-white"
             >
-              {cellType === "plant"
+              {selectedCellModel === "plant"
                 ? "Eukaryotic Plant Cell · Sketchfab · by jlf_illustration"
                 : "Animal Cell · Sketchfab · by aremay"}
             </a>
