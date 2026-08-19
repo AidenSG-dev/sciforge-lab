@@ -15,6 +15,7 @@ interface AtomData {
   symbol: AtomId;
   name: string;
   atomicNumber: number;
+  shells: number[];
   valence: number;
   color: string;
 }
@@ -34,11 +35,25 @@ interface MoleculeSpec {
 }
 
 const ATOMS: Record<AtomId, AtomData> = {
-  H: { symbol: "H", name: "Hydrogen", atomicNumber: 1, valence: 1, color: "#f2fbff" },
-  C: { symbol: "C", name: "Carbon", atomicNumber: 6, valence: 4, color: "#b8c9d4" },
-  N: { symbol: "N", name: "Nitrogen", atomicNumber: 7, valence: 5, color: "#82d7ff" },
-  O: { symbol: "O", name: "Oxygen", atomicNumber: 8, valence: 6, color: "#ff8c76" },
-  Cl: { symbol: "Cl", name: "Chlorine", atomicNumber: 17, valence: 7, color: "#adffbf" },
+  H: { symbol: "H", name: "Hydrogen", atomicNumber: 1, shells: [1], valence: 1, color: "#f2fbff" },
+  C: { symbol: "C", name: "Carbon", atomicNumber: 6, shells: [2, 4], valence: 4, color: "#b8c9d4" },
+  N: {
+    symbol: "N",
+    name: "Nitrogen",
+    atomicNumber: 7,
+    shells: [2, 5],
+    valence: 5,
+    color: "#82d7ff",
+  },
+  O: { symbol: "O", name: "Oxygen", atomicNumber: 8, shells: [2, 6], valence: 6, color: "#ff8c76" },
+  Cl: {
+    symbol: "Cl",
+    name: "Chlorine",
+    atomicNumber: 17,
+    shells: [2, 8, 7],
+    valence: 7,
+    color: "#adffbf",
+  },
 };
 
 function readString(params: SimulationParams, id: string, fallback: string): string {
@@ -117,6 +132,17 @@ function getMolecule(a: AtomId, b: AtomId): MoleculeSpec | null {
       connections: [{ a: 0, b: 1, order: 1 }],
       explanation:
         "Each chlorine atom contributes one unpaired electron, forming one shared electron pair.",
+    };
+  if ((a === "H" && b === "Cl") || (a === "Cl" && b === "H"))
+    return {
+      formula: "HCl",
+      name: "Hydrogen chloride",
+      bondLabel: "SINGLE COVALENT",
+      sharedPairs: 1,
+      atoms: ["H", "Cl"],
+      connections: [{ a: 0, b: 1, order: 1 }],
+      explanation:
+        "Hydrogen and chlorine each contribute one unpaired valence electron to form one shared electron pair.",
     };
   if ((a === "H" && b === "O") || (a === "O" && b === "H"))
     return {
@@ -407,7 +433,26 @@ function createBondingModule(): SimulationModule {
                 { x: 266, y: 308 },
                 { x: 534, y: 308 },
               ]
-            : [{ x: 400, y: 300 }];
+            : count === 3
+              ? [
+                  { x: 250, y: 230 },
+                  { x: 550, y: 230 },
+                  { x: 400, y: 460 },
+                ]
+              : count === 4
+                ? [
+                    { x: 220, y: 210 },
+                    { x: 580, y: 210 },
+                    { x: 220, y: 430 },
+                    { x: 580, y: 430 },
+                  ]
+                : [
+                    { x: 180, y: 190 },
+                    { x: 620, y: 190 },
+                    { x: 180, y: 430 },
+                    { x: 620, y: 430 },
+                    { x: 400, y: 500 },
+                  ];
         const final: Array<{ x: number; y: number }> =
           count === 2
             ? [
@@ -502,34 +547,79 @@ function createBondingModule(): SimulationModule {
         atomLayer.replaceChildren();
         electronLayer.replaceChildren();
         bondLayer.replaceChildren();
-        if (spec) {
+        const currentSpec = spec;
+        if (currentSpec) {
           const amplitude = formed ? 1.2 : 0;
-          spec.atoms.forEach((symbol, index) => {
+          const shareProgress = clamp((phase - 0.28) / 0.72, 0, 1);
+          const orbitTime = running ? now : 0;
+          currentSpec.atoms.forEach((symbol, index) => {
             const data = ATOMS[symbol];
             const point = atomPositions[index] ?? { x: 400, y: 300 };
-            const x = point.x + Math.sin(now * 0.002 + index) * amplitude;
-            const y = point.y + Math.cos(now * 0.0018 + index) * amplitude;
-            atomLayer.append(
-              svg("circle", {
-                cx: String(x),
-                cy: String(y),
-                r: "43",
-                fill: data.color,
-                "fill-opacity": "0.08",
-                stroke: data.color,
-                "stroke-opacity": "0.22",
-                filter: "url(#bond-glow)",
-              }),
+            const x = point.x + Math.sin(orbitTime * 0.002 + index) * amplitude;
+            const y = point.y + Math.cos(orbitTime * 0.0018 + index) * amplitude;
+            const connectionsForAtom = currentSpec.connections.filter(
+              (connection) => connection.a === index || connection.b === index,
             );
+            const bondingPairs = connectionsForAtom.reduce(
+              (total, connection) => total + connection.order,
+              0,
+            );
+            const neighbor = connectionsForAtom[0];
+            const neighborIndex = neighbor
+              ? neighbor.a === index
+                ? neighbor.b
+                : neighbor.a
+              : index;
+            const neighborPoint = atomPositions[neighborIndex] ?? point;
+            const bondingTarget = { x: (x + neighborPoint.x) / 2, y: (y + neighborPoint.y) / 2 };
+            data.shells.forEach((shellElectrons, shellIndex) => {
+              const radius = 38 + shellIndex * 17;
+              atomLayer.append(
+                svg("circle", {
+                  cx: String(x),
+                  cy: String(y),
+                  r: String(radius),
+                  fill: "none",
+                  stroke: shellIndex === data.shells.length - 1 ? data.color : "#8bbbe4",
+                  "stroke-opacity": shellIndex === data.shells.length - 1 ? "0.42" : "0.18",
+                  "stroke-width": shellIndex === data.shells.length - 1 ? "1.4" : "1",
+                  "stroke-dasharray": shellIndex === data.shells.length - 1 ? "2 7" : "1 9",
+                }),
+              );
+              if (!showElectrons) return;
+              for (let electron = 0; electron < shellElectrons; electron += 1) {
+                const angle =
+                  (electron / Math.max(1, shellElectrons)) * Math.PI * 2 +
+                  orbitTime * (0.00022 / (shellIndex + 1)) * (index % 2 === 0 ? 1 : -1);
+                const orbitX = x + Math.cos(angle) * radius;
+                const orbitY = y + Math.sin(angle) * radius;
+                const isValence = shellIndex === data.shells.length - 1;
+                const highlighted =
+                  isValence && electron >= shellElectrons - Math.min(bondingPairs, shellElectrons);
+                const targetFactor = highlighted ? shareProgress : 0;
+                const electronX = orbitX + (bondingTarget.x - orbitX) * targetFactor;
+                const electronY = orbitY + (bondingTarget.y - orbitY) * targetFactor;
+                electronLayer.append(
+                  svg("circle", {
+                    cx: String(electronX),
+                    cy: String(electronY),
+                    r: highlighted ? "4.5" : "3.2",
+                    fill: highlighted ? "#fff1a6" : "#f3fbff",
+                    "fill-opacity": highlighted ? String(0.65 + shareProgress * 0.35) : "0.58",
+                    ...(highlighted ? { filter: "url(#bond-glow)" } : {}),
+                  }),
+                );
+              }
+            });
             atomLayer.append(
               svg("circle", {
                 cx: String(x),
                 cy: String(y),
-                r: "32",
+                r: "31",
                 fill: "#0b1626",
                 stroke: data.color,
                 "stroke-width": "2",
-                "stroke-opacity": "0.82",
+                "stroke-opacity": "0.9",
               }),
             );
             const label = svg("text", {
@@ -551,29 +641,10 @@ function createBondingModule(): SimulationModule {
               "font-size": "9",
               "text-anchor": "middle",
             });
-            meta.textContent = `Z ${data.atomicNumber} · V ${data.valence}`;
+            meta.textContent = `Z ${data.atomicNumber} · ${data.shells.join(",")} · V ${data.valence}`;
             atomLayer.append(meta);
-            if (showElectrons) {
-              const slots = data.valence;
-              for (let electron = 0; electron < slots; electron += 1) {
-                const angle =
-                  (electron / Math.max(1, slots)) * Math.PI * 2 + now * 0.0004 * (running ? 1 : 0);
-                const radius = 50 + (electron % 2) * 4;
-                electronLayer.append(
-                  svg("circle", {
-                    cx: String(x + Math.cos(angle) * radius),
-                    cy: String(y + Math.sin(angle) * radius),
-                    r: "3.5",
-                    fill: "#f8ffff",
-                    "fill-opacity": String(
-                      0.35 + (electron < Math.max(1, data.valence - 4) ? phase * 0.45 : 0),
-                    ),
-                  }),
-                );
-              }
-            }
           });
-          spec.connections.forEach((connection, connectionIndex) => {
+          currentSpec.connections.forEach((connection, connectionIndex) => {
             const start = atomPositions[connection.a] ?? { x: 400, y: 300 };
             const end = atomPositions[connection.b] ?? { x: 400, y: 300 };
             for (let pair = 0; pair < connection.order; pair += 1) {
@@ -629,12 +700,18 @@ function createBondingModule(): SimulationModule {
               );
             }
           });
-          subtitle.textContent = `${spec.formula}  ·  ${spec.bondLabel}  ·  ${spec.sharedPairs} SHARED PAIR${spec.sharedPairs === 1 ? "" : "S"}`;
+          subtitle.textContent = `${currentSpec.formula}  ·  ${currentSpec.bondLabel}  ·  ${currentSpec.sharedPairs} SHARED PAIR${currentSpec.sharedPairs === 1 ? "" : "S"}`;
           phaseText.textContent = formed
-            ? "BOND ESTABLISHED"
-            : running
-              ? "ELECTRON SHARING"
-              : "SEPARATED ATOMS";
+            ? "STABLE MOLECULE"
+            : !running
+              ? "SEPARATED ATOMS"
+              : phase < 0.28
+                ? "ATOMS APPROACH"
+                : phase < 0.55
+                  ? "VALENCE ELECTRONS"
+                  : phase < 0.8
+                    ? "SHELLS OVERLAP"
+                    : "SHARED ELECTRON PAIRS";
         } else {
           subtitle.textContent = `${atomA} + ${atomB}  ·  NO BASIC COVALENT CONFIGURATION`;
           phaseText.textContent = "UNSUPPORTED PAIR";
