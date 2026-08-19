@@ -1,5 +1,6 @@
 import * as placeholders from "../placeholders/modules";
 import { physicsPendulum } from "../modules/physics-pendulum";
+import { physicsBuoyancy } from "../modules/physics-buoyancy";
 import type { SimulationModule, SubjectId } from "../types";
 
 /**
@@ -14,7 +15,7 @@ import type { SimulationModule, SubjectId } from "../types";
  */
 const modules: SimulationModule[] = [
   physicsPendulum,
-  placeholders.physicsBuoyancy,
+  physicsBuoyancy,
   placeholders.chemistryStates,
   placeholders.chemistryBonding,
   placeholders.biologyHeart,
