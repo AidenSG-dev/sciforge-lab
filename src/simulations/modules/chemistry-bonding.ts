@@ -453,33 +453,41 @@ function createBondingModule(): SimulationModule {
                     { x: 620, y: 430 },
                     { x: 400, y: 500 },
                   ];
+        const moleculeFormula = spec?.formula;
         const final: Array<{ x: number; y: number }> =
           count === 2
             ? [
-                { x: 400 - distance * 24, y: 308 },
-                { x: 400 + distance * 24, y: 308 },
+                { x: 400 - distance * 18, y: 308 },
+                { x: 400 + distance * 18, y: 308 },
               ]
-            : count === 3 && spec?.formula === "H₂O"
+            : moleculeFormula === "H₂O"
               ? [
-                  { x: 400, y: 292 },
-                  { x: 320, y: 370 },
-                  { x: 480, y: 370 },
+                  { x: 400, y: 300 },
+                  { x: 335, y: 365 },
+                  { x: 465, y: 365 },
                 ]
-              : count === 3
+              : moleculeFormula === "CO₂"
                 ? [
                     { x: 400, y: 300 },
-                    { x: 290, y: 300 },
-                    { x: 510, y: 300 },
+                    { x: 275, y: 300 },
+                    { x: 525, y: 300 },
                   ]
-                : count === 4
+                : moleculeFormula === "NH₃"
                   ? [
                       { x: 400, y: 300 },
-                      { x: 300, y: 230 },
-                      { x: 500, y: 230 },
-                      { x: 300, y: 400 },
-                      { x: 500, y: 400 },
+                      { x: 320, y: 365 },
+                      { x: 480, y: 365 },
+                      { x: 400, y: 410 },
                     ]
-                  : [{ x: 400, y: 300 }];
+                  : moleculeFormula === "CH₄"
+                    ? [
+                        { x: 400, y: 300 },
+                        { x: 400, y: 205 },
+                        { x: 315, y: 340 },
+                        { x: 485, y: 340 },
+                        { x: 400, y: 420 },
+                      ]
+                    : [{ x: 400, y: 300 }];
         return final.map((point, index) => {
           const start = separated[index] ?? separated[0] ?? { x: 400, y: 300 };
           return {
@@ -662,7 +670,7 @@ function createBondingModule(): SimulationModule {
                   d: path,
                   fill: "none",
                   stroke: "#67e5ff",
-                  "stroke-opacity": String(0.18 + phase * 0.55),
+                  "stroke-opacity": String((0.18 + phase * 0.55) * shareProgress),
                   "stroke-width": "3",
                   filter: "url(#bond-glow)",
                 }),
@@ -672,30 +680,9 @@ function createBondingModule(): SimulationModule {
                   d: path,
                   fill: "none",
                   stroke: "#89edff",
-                  "stroke-opacity": String(0.2 + phase * 0.65),
+                  "stroke-opacity": String((0.2 + phase * 0.65) * shareProgress),
                   "stroke-width": "1.2",
                   "stroke-dasharray": "5 8",
-                }),
-              );
-              const travel = (now * 0.00035 + pair * 0.21 + connectionIndex * 0.13) % 1;
-              const t = travel;
-              const electronX = (1 - t) * (1 - t) * start.x + 2 * (1 - t) * t * mx + t * t * end.x;
-              const electronY = (1 - t) * (1 - t) * start.y + 2 * (1 - t) * t * my + t * t * end.y;
-              bondLayer.append(
-                svg("circle", {
-                  cx: String(electronX),
-                  cy: String(electronY),
-                  r: "5.5",
-                  fill: "#fff4aa",
-                  filter: "url(#bond-glow)",
-                }),
-              );
-              bondLayer.append(
-                svg("circle", {
-                  cx: String(electronX + 9),
-                  cy: String(electronY + 3),
-                  r: "3.8",
-                  fill: "#ffd86b",
                 }),
               );
             }
