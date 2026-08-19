@@ -279,21 +279,19 @@ export function GraphPanel({
                 fontSize: 12,
               }}
             />
-            <line />
-            <g>
-              {graph.series.map((series, index) => (
-                <Line
-                  key={series.id}
-                  type="monotone"
-                  dataKey={series.id}
-                  name={series.label}
-                  stroke={chartColors[(series.colorToken ?? index + 1) - 1]}
-                  strokeWidth={2}
-                  dot={false}
-                  isAnimationActive={false}
-                />
-              ))}
-            </g>
+            {graph.series.map((series, index) => (
+              <Line
+                key={series.id}
+                type="monotone"
+                dataKey={series.id}
+                name={series.label}
+                stroke={chartColors[(series.colorToken ?? index + 1) - 1]}
+                strokeWidth={3}
+                dot={false}
+                isAnimationActive={false}
+                connectNulls
+              />
+            ))}
           </LineChart>
         </ResponsiveContainer>
         {!data.length && (
