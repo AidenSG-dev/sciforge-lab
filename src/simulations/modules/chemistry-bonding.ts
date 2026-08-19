@@ -457,8 +457,8 @@ function createBondingModule(): SimulationModule {
         const final: Array<{ x: number; y: number }> =
           count === 2
             ? [
-                { x: 400 - distance * 18, y: 308 },
-                { x: 400 + distance * 18, y: 308 },
+                { x: 400 - (48 + distance * 11) / 2, y: 308 },
+                { x: 400 + (48 + distance * 11) / 2, y: 308 },
               ]
             : moleculeFormula === "H₂O"
               ? [
@@ -559,12 +559,12 @@ function createBondingModule(): SimulationModule {
         if (currentSpec) {
           const amplitude = formed ? 1.2 : 0;
           const shareProgress = clamp((phase - 0.28) / 0.72, 0, 1);
-          const orbitTime = running ? now : 0;
           currentSpec.atoms.forEach((symbol, index) => {
             const data = ATOMS[symbol];
             const point = atomPositions[index] ?? { x: 400, y: 300 };
-            const x = point.x + Math.sin(orbitTime * 0.002 + index) * amplitude;
-            const y = point.y + Math.cos(orbitTime * 0.0018 + index) * amplitude;
+            const driftTime = running ? now : 0;
+            const x = point.x + Math.sin(driftTime * 0.002 + index) * amplitude;
+            const y = point.y + Math.cos(driftTime * 0.0018 + index) * amplitude;
             const connectionsForAtom = currentSpec.connections.filter(
               (connection) => connection.a === index || connection.b === index,
             );
@@ -572,48 +572,88 @@ function createBondingModule(): SimulationModule {
               (total, connection) => total + connection.order,
               0,
             );
-            const neighbor = connectionsForAtom[0];
-            const neighborIndex = neighbor
-              ? neighbor.a === index
-                ? neighbor.b
-                : neighbor.a
-              : index;
-            const neighborPoint = atomPositions[neighborIndex] ?? point;
-            const bondingTarget = { x: (x + neighborPoint.x) / 2, y: (y + neighborPoint.y) / 2 };
             data.shells.forEach((shellElectrons, shellIndex) => {
-              const radius = 38 + shellIndex * 17;
+              const isInnerShell = shellIndex === 0;
+              const isValenceShell = shellIndex === data.shells.length - 1;
+              const radius = 39 + shellIndex * 20;
+              const shellRotation = running && (isInnerShell ? data.shells.length > 1 : !formed);
+              const shellTime = shellRotation ? now : 0;
               atomLayer.append(
                 svg("circle", {
                   cx: String(x),
                   cy: String(y),
                   r: String(radius),
                   fill: "none",
-                  stroke: shellIndex === data.shells.length - 1 ? data.color : "#8bbbe4",
-                  "stroke-opacity": shellIndex === data.shells.length - 1 ? "0.42" : "0.18",
-                  "stroke-width": shellIndex === data.shells.length - 1 ? "1.4" : "1",
-                  "stroke-dasharray": shellIndex === data.shells.length - 1 ? "2 7" : "1 9",
+                  stroke: isValenceShell ? data.color : "#c9e8ff",
+                  "stroke-opacity": isValenceShell ? "0.74" : "0.56",
+                  "stroke-width": isValenceShell ? "2.2" : "1.8",
+                  "stroke-dasharray": isValenceShell ? "7 5" : "none",
+                  ...(isInnerShell ? { filter: "url(#bond-glow)" } : {}),
                 }),
               );
               if (!showElectrons) return;
+              const unpairedCount = isValenceShell
+                ? shellElectrons <= 4
+                  ? shellElectrons
+                  : 8 - shellElectrons
+                : 0;
+              const orbitalGroupCount =
+                unpairedCount + Math.ceil((shellElectrons - unpairedCount) / 2);
               for (let electron = 0; electron < shellElectrons; electron += 1) {
+                const inUnpairedGroup = electron < unpairedCount;
+                const orbitalGroup = inUnpairedGroup
+                  ? electron
+                  : unpairedCount + Math.floor((electron - unpairedCount) / 2);
+                const inPair = inUnpairedGroup ? 0 : (electron - unpairedCount) % 2;
                 const angle =
-                  (electron / Math.max(1, shellElectrons)) * Math.PI * 2 +
-                  orbitTime * (0.00022 / (shellIndex + 1)) * (index % 2 === 0 ? 1 : -1);
+                  (orbitalGroup / Math.max(1, orbitalGroupCount)) * Math.PI * 2 +
+                  inPair * 0.14 +
+                  shellTime * (isInnerShell ? 0.0003 : 0.0002) * (index % 2 === 0 ? 1 : -1);
                 const orbitX = x + Math.cos(angle) * radius;
                 const orbitY = y + Math.sin(angle) * radius;
-                const isValence = shellIndex === data.shells.length - 1;
                 const highlighted =
-                  isValence && electron >= shellElectrons - Math.min(bondingPairs, shellElectrons);
-                const targetFactor = highlighted ? shareProgress : 0;
-                const electronX = orbitX + (bondingTarget.x - orbitX) * targetFactor;
-                const electronY = orbitY + (bondingTarget.y - orbitY) * targetFactor;
+                  isValenceShell && electron < Math.min(bondingPairs, unpairedCount);
+                const highlightedIndex = highlighted ? electron : -1;
+                let targetX = orbitX;
+                let targetY = orbitY;
+                if (highlighted && connectionsForAtom.length > 0) {
+                  let remaining = highlightedIndex;
+                  let selectedConnection = connectionsForAtom[0]!;
+                  let pairInConnection = 0;
+                  for (const connection of connectionsForAtom) {
+                    if (remaining < connection.order) {
+                      selectedConnection = connection;
+                      pairInConnection = remaining;
+                      break;
+                    }
+                    remaining -= connection.order;
+                  }
+                  const otherIndex =
+                    selectedConnection.a === index ? selectedConnection.b : selectedConnection.a;
+                  const otherPoint = atomPositions[otherIndex] ?? point;
+                  const dx = otherPoint.x - point.x;
+                  const dy = otherPoint.y - point.y;
+                  const length = Math.max(1, Math.hypot(dx, dy));
+                  const normalX = -dy / length;
+                  const normalY = dx / length;
+                  const overlapCenterX = (x + otherPoint.x) / 2;
+                  const overlapCenterY = (y + otherPoint.y) / 2;
+                  const overlapOffset =
+                    (pairInConnection - (selectedConnection.order - 1) / 2) * 11;
+                  const target = {
+                    x: overlapCenterX + normalX * overlapOffset,
+                    y: overlapCenterY + normalY * overlapOffset,
+                  };
+                  targetX = orbitX + (target.x - orbitX) * shareProgress;
+                  targetY = orbitY + (target.y - orbitY) * shareProgress;
+                }
                 electronLayer.append(
                   svg("circle", {
-                    cx: String(electronX),
-                    cy: String(electronY),
-                    r: highlighted ? "4.5" : "3.2",
-                    fill: highlighted ? "#fff1a6" : "#f3fbff",
-                    "fill-opacity": highlighted ? String(0.65 + shareProgress * 0.35) : "0.58",
+                    cx: String(targetX),
+                    cy: String(targetY),
+                    r: highlighted ? "5" : "3.5",
+                    fill: highlighted ? "#ffe36e" : "#f3fbff",
+                    "fill-opacity": highlighted ? String(0.78 + shareProgress * 0.22) : "0.82",
                     ...(highlighted ? { filter: "url(#bond-glow)" } : {}),
                   }),
                 );
