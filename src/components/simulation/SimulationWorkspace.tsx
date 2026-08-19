@@ -79,6 +79,7 @@ export function SimulationWorkspace({ module }: { module: SimulationModule }) {
           </div>
           <SimulationViewport
             simulationId={module.id}
+            cellType={typeof params["cellType"] === "string" ? params["cellType"] : undefined}
             containerRef={runtime.containerRef}
             status={status}
             errorMessage={errorMessage}
