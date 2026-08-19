@@ -91,7 +91,7 @@ export function SimulationWorkspace({ module }: { module: SimulationModule }) {
           <MeasurementsPanel measurements={measurements} />
         </div>
         <div className="mt-4">
-          <GraphPanel graph={module.graph} data={graphData} />
+          <GraphPanel graph={module.graph} data={graphData} measurements={measurements} />
         </div>
         <div className="mt-4">
           <ExplanationPanel explanation={explanation} />

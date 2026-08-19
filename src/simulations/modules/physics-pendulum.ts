@@ -147,8 +147,10 @@ function createPendulumModule(): SimulationModule {
       let animationFrame = 0;
       let running = false;
       let oscillations = 0;
-      let lastAngle = theta;
       let previousSign = Math.sign(theta) || 1;
+      let previousAngularVelocity = angularVelocity;
+      let measuredPeriod: number | null = null;
+      let peakTimes: number[] = [];
       let width = 800;
       let height = 600;
       let trail: Array<{ x: number; y: number }> = [];
@@ -363,7 +365,9 @@ function createPendulumModule(): SimulationModule {
       root.append(svg);
 
       function currentBob(lengthValue = length, angleValue = theta) {
-        const scale = Math.min(210, Math.max(130, 190 * (1.1 / lengthValue)));
+        // Fixed pixels-per-metre preserves 0.5 m < 1 m < 2 m < 3 m ratios.
+        // The 3 m maximum fits the fixed SVG viewBox without auto-scaling each run.
+        const scale = 120 * lengthValue;
         const pivotX = 400;
         const pivotY = 106;
         return {
@@ -376,7 +380,9 @@ function createPendulumModule(): SimulationModule {
       }
 
       function updateMeasurements() {
-        const period = periodFor(length, gravity);
+        const calculatedPeriod = periodFor(length, gravity);
+        const period = measuredPeriod ?? calculatedPeriod;
+        const frequency = 1 / period;
         host.publishMeasurements([
           { id: "length", label: "Length", value: length, unit: "m", precision: 2 },
           { id: "gravity", label: "Gravity", value: gravity, unit: "m/s²", precision: 2 },
@@ -387,7 +393,22 @@ function createPendulumModule(): SimulationModule {
             unit: "°",
             precision: 0,
           },
-          { id: "period", label: "Period", value: period, unit: "s", precision: 2, emphasis: true },
+          {
+            id: "period",
+            label: "Period (T)",
+            value: period,
+            unit: "s",
+            precision: 2,
+            emphasis: true,
+          },
+          {
+            id: "frequency",
+            label: "Frequency (f)",
+            value: frequency,
+            unit: "Hz",
+            precision: 2,
+            emphasis: true,
+          },
           {
             id: "current-angle",
             label: "Current angle",
@@ -410,11 +431,12 @@ function createPendulumModule(): SimulationModule {
       }
 
       function updateReadout() {
-        const period = periodFor(length, gravity);
+        const period = measuredPeriod ?? periodFor(length, gravity);
+        const frequency = 1 / period;
         infoLine1.textContent = `LENGTH       ${formatNumber(length)} m`;
         infoLine2.textContent = `GRAVITY      ${formatNumber(gravity)} m/s²`;
         infoLine3.textContent = `INITIAL θ    ${formatNumber(initialAngle, 0)}°`;
-        infoLine4.textContent = `PERIOD       ${formatNumber(period)} s`;
+        infoLine4.textContent = `PERIOD       ${formatNumber(period)} s  /  ${formatNumber(frequency)} Hz`;
         currentReadout.textContent = `ANGLE ${formatNumber(degrees(theta), 1)}°   TIME ${formatNumber(elapsed, 2)} s   CYCLES ${oscillations}`;
         statusReadout.textContent = running
           ? "● RUNNING / NUMERICAL INTEGRATION"
@@ -492,7 +514,18 @@ function createPendulumModule(): SimulationModule {
         const sign = Math.sign(theta) || previousSign;
         if (sign !== previousSign && sign !== 0) oscillations += 0.5;
         previousSign = sign;
-        lastAngle = theta;
+        if (previousAngularVelocity > 0 && angularVelocity <= 0 && theta > 0) {
+          peakTimes.push(elapsed);
+          if (peakTimes.length > 1) {
+            const latestPeak = peakTimes[peakTimes.length - 1];
+            const previousPeak = peakTimes[peakTimes.length - 2];
+            if (latestPeak !== undefined && previousPeak !== undefined) {
+              measuredPeriod = latestPeak - previousPeak;
+            }
+          }
+          if (peakTimes.length > 3) peakTimes.shift();
+        }
+        previousAngularVelocity = angularVelocity;
         const bobState = currentBob();
         if (showMeasurements) {
           trail.push({ x: bobState.x, y: bobState.y });
@@ -530,8 +563,10 @@ function createPendulumModule(): SimulationModule {
         accumulator = 0;
         uiAccumulator = 0;
         oscillations = 0;
-        lastAngle = theta;
         previousSign = Math.sign(theta) || 1;
+        previousAngularVelocity = angularVelocity;
+        measuredPeriod = null;
+        peakTimes = [];
         trail = [];
         host.replaceGraphData([]);
         updateMeasurements();
@@ -567,11 +602,24 @@ function createPendulumModule(): SimulationModule {
         },
         setParam(id: string, value: ParamValue) {
           params = { ...params, [id]: value };
-          if (id === "length" && typeof value === "number") length = value;
-          if (id === "gravity" && typeof value === "number") gravity = value;
+          if (id === "length" && typeof value === "number") {
+            length = value;
+            measuredPeriod = null;
+            peakTimes = [];
+          }
+          if (id === "gravity" && typeof value === "number") {
+            gravity = value;
+            measuredPeriod = null;
+            peakTimes = [];
+          }
           if (id === "initialAngle" && typeof value === "number") {
             initialAngle = value;
-            if (!running) theta = (initialAngle * Math.PI) / 180;
+            measuredPeriod = null;
+            peakTimes = [];
+            if (!running) {
+              theta = (initialAngle * Math.PI) / 180;
+              previousAngularVelocity = 0;
+            }
           }
           if (id === "speed" && typeof value === "string") speed = Number(value) || DEFAULTS.speed;
           if (id === "showMeasurements" && typeof value === "boolean") showMeasurements = value;
@@ -590,6 +638,8 @@ function createPendulumModule(): SimulationModule {
           length = numberParam(params, "length", DEFAULTS.length);
           gravity = numberParam(params, "gravity", DEFAULTS.gravity);
           initialAngle = numberParam(params, "initialAngle", DEFAULTS.initialAngle);
+          measuredPeriod = null;
+          peakTimes = [];
           speed = numberParam(params, "speed", DEFAULTS.speed);
           showMeasurements = booleanParam(params, "showMeasurements", DEFAULTS.showMeasurements);
           resetState();
@@ -599,7 +649,6 @@ function createPendulumModule(): SimulationModule {
           container.replaceChildren();
           void width;
           void height;
-          void lastAngle;
         },
       };
     },

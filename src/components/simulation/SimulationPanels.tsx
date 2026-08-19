@@ -204,9 +204,11 @@ const chartColors = [
 export function GraphPanel({
   graph,
   data,
+  measurements = [],
 }: {
   graph: GraphSpec | undefined;
   data: Array<Record<string, number>>;
+  measurements?: Measurement[];
 }) {
   if (!graph)
     return (
@@ -217,17 +219,9 @@ export function GraphPanel({
         </p>
       </section>
     );
-  const points = data.length
-    ? data
-    : Array.from({ length: 9 }, (_, index) => ({
-        x: index,
-        ...Object.fromEntries(
-          graph.series.map((series, seriesIndex) => [
-            series.id,
-            Math.max(0, Math.sin(index / 2 + seriesIndex) * 0.3 + 0.5),
-          ]),
-        ),
-      }));
+  const period = measurements.find((measurement) => measurement.id === "period");
+  const frequency = measurements.find((measurement) => measurement.id === "frequency");
+  const points = data;
   return (
     <section className="panel overflow-hidden">
       <header className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -238,10 +232,32 @@ export function GraphPanel({
           </p>
         </div>
         <span className="rounded-full border border-border px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          {data.length ? "live data" : "mock UI data"}
+          {data.length ? "live data" : "waiting for run"}
         </span>
       </header>
-      <div className="h-64 px-2 py-4 sm:h-72 sm:px-4">
+      {(period || frequency) && (
+        <div className="grid grid-cols-2 divide-x divide-border border-b border-border">
+          <div className="px-4 py-3">
+            <p className="panel-label">Measured period (T)</p>
+            <p className="mt-1 font-mono text-lg text-subject">
+              {typeof period?.value === "number"
+                ? period.value.toFixed(period.precision ?? 2)
+                : "—"}
+              <span className="ml-1 text-xs text-muted-foreground">s</span>
+            </p>
+          </div>
+          <div className="px-4 py-3">
+            <p className="panel-label">Frequency (f = 1/T)</p>
+            <p className="mt-1 font-mono text-lg text-subject">
+              {typeof frequency?.value === "number"
+                ? frequency.value.toFixed(frequency.precision ?? 2)
+                : "—"}
+              <span className="ml-1 text-xs text-muted-foreground">Hz</span>
+            </p>
+          </div>
+        </div>
+      )}
+      <div className="relative h-64 px-2 py-4 sm:h-72 sm:px-4">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={points} margin={{ top: 8, right: 12, left: -18, bottom: 0 }}>
             <XAxis
@@ -280,6 +296,11 @@ export function GraphPanel({
             </g>
           </LineChart>
         </ResponsiveContainer>
+        {!data.length && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center pt-8 text-xs text-muted-foreground">
+            Press Play to record live angle data.
+          </div>
+        )}
       </div>
     </section>
   );
