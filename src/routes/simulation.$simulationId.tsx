@@ -17,5 +17,9 @@ function SimulationRoute() {
   const { simulationId } = Route.useParams();
   const module = getSimulation(simulationId);
   if (!module) throw notFound();
-  return module.layout === "robotics" ? <RoboticsWorkspace module={module} /> : <SimulationWorkspace module={module} />;
+  return module.layout === "robotics" ? (
+    <RoboticsWorkspace module={module} />
+  ) : (
+    <SimulationWorkspace module={module} />
+  );
 }

@@ -78,6 +78,7 @@ export function SimulationWorkspace({ module }: { module: SimulationModule }) {
             />
           </div>
           <SimulationViewport
+            simulationId={module.id}
             containerRef={runtime.containerRef}
             status={status}
             errorMessage={errorMessage}

@@ -17,12 +17,14 @@ import {
 import type { ExplanationContent, GraphSpec, Measurement } from "@/simulations/types";
 
 export function SimulationViewport({
+  simulationId,
   containerRef,
   status,
   errorMessage,
   title,
   aspectRatio,
 }: {
+  simulationId?: string;
   containerRef: React.RefObject<HTMLDivElement | null>;
   status: SimulationStatus;
   errorMessage: string | null;
@@ -76,21 +78,46 @@ export function SimulationViewport({
         className="relative m-3 overflow-hidden rounded-lg border border-border bg-[color-mix(in_oklch,var(--surface-0)_84%,var(--subject)_16%)]"
         style={{ aspectRatio }}
       >
-        <div className="absolute inset-0 lab-grid opacity-60" />
-        <div className="relative flex h-full min-h-64 flex-col items-center justify-center px-8 text-center">
-          <div
-            className={`mb-4 flex size-14 items-center justify-center rounded-2xl border border-subject/30 bg-subject/10 text-subject ${status === "loading" || status === "resetting" ? "animate-pulse" : ""}`}
-          >
-            <Icon className="size-6" />
+        {simulationId === "biology-cell" ? (
+          <div className="absolute inset-0 bg-background">
+            <iframe
+              title="Animal Cell 3D model by aremay on Sketchfab"
+              src="https://sketchfab.com/models/0b15c013059844d7a26c1f16752f8b61/embed"
+              className="absolute inset-0 h-full w-full border-0"
+              allow="autoplay; fullscreen; xr-spatial-tracking"
+              allowFullScreen
+              referrerPolicy="strict-origin-when-cross-origin"
+            />
+            <a
+              href="https://sketchfab.com/3d-models/animal-cell-0b15c013059844d7a26c1f16752f8b61"
+              target="_blank"
+              rel="noreferrer"
+              className="absolute bottom-2 left-2 rounded bg-black/70 px-2 py-1 font-mono text-[10px] text-white/80 backdrop-blur transition-colors hover:text-white"
+            >
+              Animal Cell · Sketchfab · by aremay
+            </a>
           </div>
-          <p className="font-display text-lg font-semibold text-foreground">{state.label}</p>
-          <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{state.detail}</p>
-          {status === "unavailable" && (
-            <p className="mt-5 rounded-full border border-border bg-background/70 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-              integration surface / awaiting renderer
-            </p>
-          )}
-        </div>
+        ) : (
+          <>
+            <div className="absolute inset-0 lab-grid opacity-60" />
+            <div className="relative flex h-full min-h-64 flex-col items-center justify-center px-8 text-center">
+              <div
+                className={`mb-4 flex size-14 items-center justify-center rounded-2xl border border-subject/30 bg-subject/10 text-subject ${status === "loading" || status === "resetting" ? "animate-pulse" : ""}`}
+              >
+                <Icon className="size-6" />
+              </div>
+              <p className="font-display text-lg font-semibold text-foreground">{state.label}</p>
+              <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+                {state.detail}
+              </p>
+              {status === "unavailable" && (
+                <p className="mt-5 rounded-full border border-border bg-background/70 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                  integration surface / awaiting renderer
+                </p>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </section>
   );
