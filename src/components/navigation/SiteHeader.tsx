@@ -96,8 +96,12 @@ export function SiteHeader() {
       {open && (
         <nav className="border-t border-border bg-surface px-5 py-4 lg:hidden">
           <div className="grid gap-1">
-            <MobileItem to="/" onClick={() => setOpen(false)}>Home</MobileItem>
-            <MobileItem to="/explore" onClick={() => setOpen(false)}>Explore</MobileItem>
+            <MobileItem to="/" onClick={() => setOpen(false)}>
+              Home
+            </MobileItem>
+            <MobileItem to="/explore" onClick={() => setOpen(false)}>
+              Explore
+            </MobileItem>
             <div className="my-2 h-px bg-border" />
             {SUBJECTS.map((subject) => (
               <MobileItem key={subject.id} to={subject.path} onClick={() => setOpen(false)}>

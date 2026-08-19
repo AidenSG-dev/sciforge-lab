@@ -10,33 +10,115 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as BiologyRouteImport } from './routes/biology'
+import { Route as ChemistryRouteImport } from './routes/chemistry'
+import { Route as ExploreRouteImport } from './routes/explore'
+import { Route as PhysicsRouteImport } from './routes/physics'
+import { Route as RoboticsRouteImport } from './routes/robotics'
+import { Route as SimulationSimulationIdRouteImport } from './routes/simulation.$simulationId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BiologyRoute = BiologyRouteImport.update({
+  id: '/biology',
+  path: '/biology',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChemistryRoute = ChemistryRouteImport.update({
+  id: '/chemistry',
+  path: '/chemistry',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExploreRoute = ExploreRouteImport.update({
+  id: '/explore',
+  path: '/explore',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PhysicsRoute = PhysicsRouteImport.update({
+  id: '/physics',
+  path: '/physics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RoboticsRoute = RoboticsRouteImport.update({
+  id: '/robotics',
+  path: '/robotics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SimulationSimulationIdRoute = SimulationSimulationIdRouteImport.update({
+  id: '/simulation/$simulationId',
+  path: '/simulation/$simulationId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/biology': typeof BiologyRoute
+  '/chemistry': typeof ChemistryRoute
+  '/explore': typeof ExploreRoute
+  '/physics': typeof PhysicsRoute
+  '/robotics': typeof RoboticsRoute
+  '/simulation/$simulationId': typeof SimulationSimulationIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/biology': typeof BiologyRoute
+  '/chemistry': typeof ChemistryRoute
+  '/explore': typeof ExploreRoute
+  '/physics': typeof PhysicsRoute
+  '/robotics': typeof RoboticsRoute
+  '/simulation/$simulationId': typeof SimulationSimulationIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/biology': typeof BiologyRoute
+  '/chemistry': typeof ChemistryRoute
+  '/explore': typeof ExploreRoute
+  '/physics': typeof PhysicsRoute
+  '/robotics': typeof RoboticsRoute
+  '/simulation/$simulationId': typeof SimulationSimulationIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/biology'
+    | '/chemistry'
+    | '/explore'
+    | '/physics'
+    | '/robotics'
+    | '/simulation/$simulationId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/biology'
+    | '/chemistry'
+    | '/explore'
+    | '/physics'
+    | '/robotics'
+    | '/simulation/$simulationId'
+  id:
+    | '__root__'
+    | '/'
+    | '/biology'
+    | '/chemistry'
+    | '/explore'
+    | '/physics'
+    | '/robotics'
+    | '/simulation/$simulationId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BiologyRoute: typeof BiologyRoute
+  ChemistryRoute: typeof ChemistryRoute
+  ExploreRoute: typeof ExploreRoute
+  PhysicsRoute: typeof PhysicsRoute
+  RoboticsRoute: typeof RoboticsRoute
+  SimulationSimulationIdRoute: typeof SimulationSimulationIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +130,59 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/biology': {
+      id: '/biology'
+      path: '/biology'
+      fullPath: '/biology'
+      preLoaderRoute: typeof BiologyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chemistry': {
+      id: '/chemistry'
+      path: '/chemistry'
+      fullPath: '/chemistry'
+      preLoaderRoute: typeof ChemistryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/explore': {
+      id: '/explore'
+      path: '/explore'
+      fullPath: '/explore'
+      preLoaderRoute: typeof ExploreRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/physics': {
+      id: '/physics'
+      path: '/physics'
+      fullPath: '/physics'
+      preLoaderRoute: typeof PhysicsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/robotics': {
+      id: '/robotics'
+      path: '/robotics'
+      fullPath: '/robotics'
+      preLoaderRoute: typeof RoboticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/simulation/$simulationId': {
+      id: '/simulation/$simulationId'
+      path: '/simulation/$simulationId'
+      fullPath: '/simulation/$simulationId'
+      preLoaderRoute: typeof SimulationSimulationIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BiologyRoute: BiologyRoute,
+  ChemistryRoute: ChemistryRoute,
+  ExploreRoute: ExploreRoute,
+  PhysicsRoute: PhysicsRoute,
+  RoboticsRoute: RoboticsRoute,
+  SimulationSimulationIdRoute: SimulationSimulationIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

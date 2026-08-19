@@ -57,14 +57,14 @@ export function SimulationControls({
         <Button
           size="sm"
           variant="secondary"
-          disabled={disabled}
+          disabled={disabled ?? false}
           onClick={running ? onPause : onStart}
           className="flex-1 bg-subject/15 text-foreground hover:bg-subject/25"
         >
           {running ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
           {running ? "Pause" : "Play"}
         </Button>
-        <Button size="sm" variant="outline" onClick={onReset} disabled={disabled}>
+        <Button size="sm" variant="outline" onClick={onReset} disabled={disabled ?? false}>
           <RotateCcw className="size-3.5" />
           Reset
         </Button>
@@ -79,7 +79,7 @@ export function SimulationControls({
                 key={control.id}
                 control={control}
                 value={params[control.id]}
-                disabled={disabled}
+                disabled={disabled ?? false}
                 onParamChange={onParamChange}
                 onAction={onAction}
               />
@@ -87,9 +87,7 @@ export function SimulationControls({
           </div>
         ))}
         {controls.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            This simulation declares no controls yet.
-          </p>
+          <p className="text-sm text-muted-foreground">This simulation declares no controls yet.</p>
         )}
       </div>
     </section>
@@ -127,12 +125,14 @@ function ControlField({
           </div>
           <Slider
             id={id}
-            disabled={disabled}
+            disabled={disabled ?? false}
             min={control.min}
             max={control.max}
             step={control.step ?? 0.1}
             value={[current]}
-            onValueChange={([next]) => onParamChange(control.id, next)}
+            onValueChange={([next]) => {
+              if (next !== undefined) onParamChange(control.id, next);
+            }}
             className="[&_[data-slot=slider-range]]:bg-subject [&_[data-slot=slider-thumb]]:border-subject"
           />
           {control.hint && <p className="text-xs text-muted-foreground">{control.hint}</p>}
@@ -150,7 +150,7 @@ function ControlField({
           <Input
             id={id}
             type="number"
-            disabled={disabled}
+            disabled={disabled ?? false}
             min={control.min}
             max={control.max}
             step={control.step ?? 1}
@@ -170,7 +170,7 @@ function ControlField({
           </Label>
           <Switch
             id={id}
-            disabled={disabled}
+            disabled={disabled ?? false}
             checked={current}
             onCheckedChange={(next) => onParamChange(control.id, next)}
             className="data-[state=checked]:bg-subject"
@@ -184,7 +184,7 @@ function ControlField({
         <div className="flex items-center gap-3">
           <Checkbox
             id={id}
-            disabled={disabled}
+            disabled={disabled ?? false}
             checked={current}
             onCheckedChange={(next) => onParamChange(control.id, next === true)}
             className="data-[state=checked]:border-subject data-[state=checked]:bg-subject"
@@ -203,7 +203,7 @@ function ControlField({
             {control.label}
           </Label>
           <Select
-            disabled={disabled}
+            disabled={disabled ?? false}
             value={current}
             onValueChange={(next) => onParamChange(control.id, next)}
           >
@@ -226,7 +226,7 @@ function ControlField({
         <Button
           variant={control.variant === "outline" ? "outline" : "secondary"}
           size="sm"
-          disabled={disabled}
+          disabled={disabled ?? false}
           onClick={() => onAction(control.actionId)}
           className={
             control.variant === "subject"

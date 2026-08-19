@@ -26,7 +26,9 @@ export function useSimulationRuntime(module: SimulationModule | undefined) {
 
     let cancelled = false;
     const params = defaultParamsFor(module);
-    store.getState().beginSession(module.id, params, module.explanation, module.graph?.window ?? 240);
+    store
+      .getState()
+      .beginSession(module.id, params, module.explanation, module.graph?.window ?? 240);
 
     // Placeholder modules have no behaviour: the viewport shows the
     // "module not connected yet" state instead of mounting a renderer.

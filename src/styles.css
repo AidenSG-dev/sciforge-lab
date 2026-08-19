@@ -184,7 +184,8 @@
 }
 
 @utility subject-glow {
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--subject) 30%, transparent),
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--subject) 30%, transparent),
     0 18px 60px -24px color-mix(in oklab, var(--subject) 45%, transparent);
 }
 

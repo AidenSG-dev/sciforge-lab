@@ -29,7 +29,8 @@ export const useUiStore = create<UiState>((set) => ({
   setSubjectFilter: (subjectFilter) => set({ subjectFilter }),
   setGradeFilter: (gradeFilter) => set({ gradeFilter }),
   setConceptFilter: (conceptFilter) => set({ conceptFilter }),
-  resetFilters: () => set({ query: "", subjectFilter: "all", gradeFilter: "all", conceptFilter: "all" }),
+  resetFilters: () =>
+    set({ query: "", subjectFilter: "all", gradeFilter: "all", conceptFilter: "all" }),
   setMobileNavOpen: (mobileNavOpen) => set({ mobileNavOpen }),
   setSearchOpen: (searchOpen) => set({ searchOpen }),
 }));

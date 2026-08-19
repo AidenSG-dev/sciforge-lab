@@ -28,7 +28,12 @@ interface SimulationState {
   explanation: ExplanationContent | null;
   notes: ExperimentNotes;
 
-  beginSession(id: string, params: SimulationParams, explanation: ExplanationContent, graphWindow?: number): void;
+  beginSession(
+    id: string,
+    params: SimulationParams,
+    explanation: ExplanationContent,
+    graphWindow?: number,
+  ): void;
   endSession(): void;
   setStatus(status: SimulationStatus): void;
   setError(message: string | null): void;
@@ -70,7 +75,8 @@ export const useSimulationStore = create<SimulationState>((set) => ({
       explanation,
       notes: emptyNotes,
     }),
-  endSession: () => set({ activeId: null, status: "idle", running: false, measurements: [], graphData: [] }),
+  endSession: () =>
+    set({ activeId: null, status: "idle", running: false, measurements: [], graphData: [] }),
   setStatus: (status) => set({ status }),
   setError: (errorMessage) => set({ errorMessage, status: errorMessage ? "error" : "ready" }),
   setRunning: (running) => set({ running }),
@@ -80,7 +86,9 @@ export const useSimulationStore = create<SimulationState>((set) => ({
   appendGraphSample: (sample) =>
     set((s) => {
       const next = [...s.graphData, sample];
-      return { graphData: next.length > s.graphWindow ? next.slice(next.length - s.graphWindow) : next };
+      return {
+        graphData: next.length > s.graphWindow ? next.slice(next.length - s.graphWindow) : next,
+      };
     }),
   replaceGraphData: (graphData) => set({ graphData }),
   patchExplanation: (content) =>

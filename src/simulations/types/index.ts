@@ -80,12 +80,7 @@ export interface ButtonControl extends ControlBase {
 }
 
 export type SimulationControl =
-  | SliderControl
-  | NumberControl
-  | ToggleControl
-  | CheckboxControl
-  | SelectControl
-  | ButtonControl;
+  SliderControl | NumberControl | ToggleControl | CheckboxControl | SelectControl | ButtonControl;
 
 /* -------------------------------------------------------------------------- */
 /* Data the simulation pushes back to the UI                                  */
