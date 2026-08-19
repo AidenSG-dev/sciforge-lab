@@ -281,10 +281,72 @@ function createStatesModule(): SimulationModule {
         fill: "none",
         stroke: "#84e8ff",
         "stroke-width": "2",
-        "stroke-opacity": "0.45",
+        "stroke-opacity": "0.72",
       });
-      const liquidShade = createSvgElement("path", { fill: "#48bee4", "fill-opacity": "0.08" });
+      const liquidShade = createSvgElement("path", { fill: "#48bee4", "fill-opacity": "0.14" });
+      const liquidLabel = createSvgElement("text", {
+        x: "304",
+        y: "344",
+        fill: "#b8f4ff",
+        "font-family": "ui-monospace, SFMono-Regular, Menlo, monospace",
+        "font-size": "10",
+        "letter-spacing": "1.5",
+      });
+      const gasHint = createSvgElement("text", {
+        x: "304",
+        y: "144",
+        fill: "#f3c677",
+        "font-family": "ui-monospace, SFMono-Regular, Menlo, monospace",
+        "font-size": "10",
+        "letter-spacing": "1.5",
+      });
+      const gasArrows = createSvgElement("g", {
+        stroke: "#f1c26e",
+        "stroke-opacity": "0.52",
+        fill: "none",
+      });
+      gasArrows.append(
+        createSvgElement("path", { d: "M 712 196 l 0 -18 m 0 -0 l -4 7 m 4 -7 l 4 7" }),
+        createSvgElement("path", { d: "M 736 238 l 0 -18 m 0 -0 l -4 7 m 4 -7 l 4 7" }),
+      );
+      const iceBlock = createSvgElement("path", {
+        d: "M 390 415 Q 520 398 650 415 L 650 498 Q 520 510 390 498 Z",
+        fill: "#94eaff",
+        "fill-opacity": "0.13",
+        stroke: "#a8f1ff",
+        "stroke-opacity": "0.36",
+        "stroke-width": "2",
+      });
+      const iceCracks = createSvgElement("g", {
+        stroke: "#b9f5ff",
+        "stroke-opacity": "0.35",
+        fill: "none",
+        "stroke-width": "1.5",
+      });
+      iceCracks.append(
+        createSvgElement("path", { d: "M 430 432 l 24 18 l -9 21 l 28 18" }),
+        createSvgElement("path", { d: "M 570 424 l -18 26 l 18 18 l -8 22" }),
+        createSvgElement("path", { d: "M 622 438 l -20 17 l 8 22" }),
+      );
       const attractionLayer = createSvgElement("g", {});
+      const thermalLeft = createSvgElement("rect", {
+        x: "260",
+        y: "116",
+        width: "18",
+        height: "390",
+        rx: "9",
+        fill: "#ff684c",
+        "fill-opacity": "0",
+      });
+      const thermalRight = createSvgElement("rect", {
+        x: "762",
+        y: "116",
+        width: "18",
+        height: "390",
+        rx: "9",
+        fill: "#ff684c",
+        "fill-opacity": "0",
+      });
       const particleLayer = createSvgElement("g", {});
       const particleGlows = particles.map(() =>
         createSvgElement("circle", {
@@ -424,8 +486,15 @@ function createStatesModule(): SimulationModule {
         chamberTop,
         chamberBase,
         volumeGuide,
+        thermalLeft,
+        thermalRight,
         liquidShade,
+        iceBlock,
+        iceCracks,
         liquidSurface,
+        liquidLabel,
+        gasHint,
+        gasArrows,
         temperatureGlow,
         info,
         legend,
@@ -504,24 +573,39 @@ function createStatesModule(): SimulationModule {
         return `${wavePath(time)} L ${CHAMBER.right - 8} ${CHAMBER.bottom} L ${CHAMBER.left + 8} ${CHAMBER.bottom} Z`;
       }
 
+      function solidPosition(index: number): { x: number; y: number } {
+        const column = index % 12;
+        const row = Math.floor(index / 12);
+        return { x: 412 + column * 18, y: 424 + row * 13 };
+      }
+
+      function liquidPosition(index: number): { x: number; y: number } {
+        return {
+          x: 316 + ((index * 47) % 408),
+          y: 382 + ((index * 31) % 112),
+        };
+      }
+
       function updateAttractions(phase: number, temperatureGlowAmount: number) {
         attractionLayer.replaceChildren();
-        const show = clamp(1 - phase * 0.58 - temperatureGlowAmount * 0.28, 0.05, 0.82);
+        const show = clamp((1 - phase) * 0.74 - temperatureGlowAmount * 0.15, 0, 0.7);
         const solidColumns = 12;
         const solidRows = 6;
         for (let row = 0; row < solidRows; row += 1) {
           for (let column = 0; column < solidColumns - 1; column += 1) {
             const index = row * solidColumns + column;
             const next = index + 1;
+            const start = solidPosition(index);
+            const end = solidPosition(next);
             const line = createSvgElement("line", {
-              x1: String(particles[index]?.latticeX ?? 0),
-              y1: String(particles[index]?.latticeY ?? 0),
-              x2: String(particles[next]?.latticeX ?? 0),
-              y2: String(particles[next]?.latticeY ?? 0),
+              x1: String(start.x),
+              y1: String(start.y),
+              x2: String(end.x),
+              y2: String(end.y),
               stroke: particleColor(),
               "stroke-opacity": String(show),
-              "stroke-width": "1",
-              "stroke-dasharray": phase > 0.6 ? "2 5" : "none",
+              "stroke-width": "1.2",
+              "stroke-dasharray": phase > 0.35 ? "2 5" : "none",
             });
             attractionLayer.append(line);
           }
@@ -538,25 +622,28 @@ function createStatesModule(): SimulationModule {
         );
         const speed = 0.5 + temperatureEnergy * 1.9;
         particles.forEach((particle, index) => {
-          const vibration = 2 + temperatureEnergy * 13;
+          const vibration = 1.5 + temperatureEnergy * 9;
+          const lattice = solidPosition(index);
+          const fluid = liquidPosition(index);
           const latticeX =
-            particle.latticeX +
-            Math.sin(time * (2.2 + particle.seed * 0.03) + particle.seed) * vibration;
+            lattice.x + Math.sin(time * (2.2 + particle.seed * 0.03) + particle.seed) * vibration;
           const latticeY =
-            particle.latticeY +
+            lattice.y +
             Math.cos(time * (2.0 + particle.seed * 0.025) + particle.seed * 0.7) * vibration;
           const liquidX =
-            particle.x +
-            Math.sin(time * speed + particle.seed * 0.4) * (10 + temperatureEnergy * 18);
+            fluid.x + Math.sin(time * speed + particle.seed * 0.4) * (8 + temperatureEnergy * 18);
           const liquidY =
-            particle.y +
-            Math.cos(time * speed * 0.72 + particle.seed) * (8 + temperatureEnergy * 12);
+            fluid.y + Math.cos(time * speed * 0.72 + particle.seed) * (6 + temperatureEnergy * 12);
           particle.gasX += particle.gasVX * step * speed;
           particle.gasY += particle.gasVY * step * speed;
-          if (particle.gasX < CHAMBER.left + 24 || particle.gasX > CHAMBER.right - 24)
+          if (particle.gasX < CHAMBER.left + 24 || particle.gasX > CHAMBER.right - 24) {
             particle.gasVX *= -1;
-          if (particle.gasY < CHAMBER.top + 34 || particle.gasY > CHAMBER.bottom - 24)
+            particle.gasX = clamp(particle.gasX, CHAMBER.left + 24, CHAMBER.right - 24);
+          }
+          if (particle.gasY < CHAMBER.top + 34 || particle.gasY > CHAMBER.bottom - 24) {
             particle.gasVY *= -1;
+            particle.gasY = clamp(particle.gasY, CHAMBER.top + 34, CHAMBER.bottom - 24);
+          }
           const mixedLiquidX = latticeX * (1 - liquidMix) + liquidX * liquidMix;
           const mixedLiquidY = latticeY * (1 - liquidMix) + liquidY * liquidMix;
           const x = mixedLiquidX * (1 - gasMix) + particle.gasX * gasMix;
@@ -660,10 +747,45 @@ function createStatesModule(): SimulationModule {
               : "#58bde8",
         );
         temperatureGlow.setAttribute("fill-opacity", String(0.015 + glowAmount * 0.06));
+        const liquidAmount = clamp(status.value < 1 ? status.value : 2 - status.value, 0, 1);
+        const gasAmount = clamp(status.value - 1, 0, 1);
+        const solidAmount = clamp(1 - status.value, 0, 1);
+        const hotAmount = clamp(
+          (temperature - material.melting) / Math.max(1, material.boiling - material.melting),
+          0,
+          1.4,
+        );
+        const coldAmount = clamp(
+          (material.melting - temperature) / Math.max(1, Math.abs(material.melting) + 40),
+          0,
+          1,
+        );
         liquidSurface.setAttribute("d", wavePath(time));
+        liquidSurface.setAttribute("stroke", material.accent);
+        liquidSurface.setAttribute("stroke-opacity", String(0.15 + liquidAmount * 0.62));
         liquidShade.setAttribute("d", liquidPath(time));
         liquidShade.setAttribute("fill", material.tint);
-        liquidSurface.setAttribute("stroke", material.accent);
+        liquidShade.setAttribute("fill-opacity", String(0.02 + liquidAmount * 0.17));
+        liquidLabel.textContent =
+          liquidAmount > 0.2
+            ? `${(material.label.split(" /")[0] ?? material.label).toUpperCase()} / LIQUID LEVEL`
+            : "";
+        liquidLabel.setAttribute("opacity", String(liquidAmount));
+        gasHint.textContent = gasAmount > 0.18 ? "VAPOUR / DIFFUSION" : "";
+        gasHint.setAttribute("opacity", String(gasAmount));
+        gasArrows.setAttribute("opacity", String(gasAmount));
+        iceBlock.setAttribute("opacity", String(solidAmount));
+        iceCracks.setAttribute("opacity", String(solidAmount));
+        thermalLeft.setAttribute("fill", hotAmount > coldAmount ? "#ff654b" : "#45bfff");
+        thermalRight.setAttribute("fill", hotAmount > coldAmount ? "#ff654b" : "#45bfff");
+        thermalLeft.setAttribute(
+          "fill-opacity",
+          String(0.015 + Math.max(hotAmount, coldAmount) * 0.12),
+        );
+        thermalRight.setAttribute(
+          "fill-opacity",
+          String(0.015 + Math.max(hotAmount, coldAmount) * 0.12),
+        );
         updateAttractions(status.value, glowAmount);
       }
 
