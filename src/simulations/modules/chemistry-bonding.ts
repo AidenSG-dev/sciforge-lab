@@ -558,7 +558,7 @@ function createBondingModule(): SimulationModule {
         const currentSpec = spec;
         if (currentSpec) {
           const amplitude = formed ? 1.2 : 0;
-          const shareProgress = clamp((phase - 0.28) / 0.72, 0, 1);
+          const shareProgress = clamp((phase - 0.55) / 0.45, 0, 1);
           currentSpec.atoms.forEach((symbol, index) => {
             const data = ATOMS[symbol];
             const point = atomPositions[index] ?? { x: 400, y: 300 };
@@ -640,9 +640,12 @@ function createBondingModule(): SimulationModule {
                   const overlapCenterY = (y + otherPoint.y) / 2;
                   const overlapOffset =
                     (pairInConnection - (selectedConnection.order - 1) / 2) * 11;
+                  const memberSign = selectedConnection.a === index ? -1 : 1;
+                  const bondUnitX = dx / length;
+                  const bondUnitY = dy / length;
                   const target = {
-                    x: overlapCenterX + normalX * overlapOffset,
-                    y: overlapCenterY + normalY * overlapOffset,
+                    x: overlapCenterX + normalX * overlapOffset + bondUnitX * memberSign * 5,
+                    y: overlapCenterY + normalY * overlapOffset + bondUnitY * memberSign * 5,
                   };
                   targetX = orbitX + (target.x - orbitX) * shareProgress;
                   targetY = orbitY + (target.y - orbitY) * shareProgress;
@@ -692,41 +695,9 @@ function createBondingModule(): SimulationModule {
             meta.textContent = `Z ${data.atomicNumber} · ${data.shells.join(",")} · V ${data.valence}`;
             atomLayer.append(meta);
           });
-          currentSpec.connections.forEach((connection, connectionIndex) => {
-            const start = atomPositions[connection.a] ?? { x: 400, y: 300 };
-            const end = atomPositions[connection.b] ?? { x: 400, y: 300 };
-            for (let pair = 0; pair < connection.order; pair += 1) {
-              const dx = end.x - start.x;
-              const dy = end.y - start.y;
-              const length = Math.max(1, Math.hypot(dx, dy));
-              const nx = -dy / length;
-              const ny = dx / length;
-              const offset = (pair - (connection.order - 1) / 2) * 22;
-              const mx = (start.x + end.x) / 2 + nx * offset;
-              const my = (start.y + end.y) / 2 + ny * offset;
-              const path = `M ${start.x} ${start.y} Q ${mx} ${my} ${end.x} ${end.y}`;
-              bondLayer.append(
-                svg("path", {
-                  d: path,
-                  fill: "none",
-                  stroke: "#67e5ff",
-                  "stroke-opacity": String((0.18 + phase * 0.55) * shareProgress),
-                  "stroke-width": "3",
-                  filter: "url(#bond-glow)",
-                }),
-              );
-              bondLayer.append(
-                svg("path", {
-                  d: path,
-                  fill: "none",
-                  stroke: "#89edff",
-                  "stroke-opacity": String((0.2 + phase * 0.65) * shareProgress),
-                  "stroke-width": "1.2",
-                  "stroke-dasharray": "5 8",
-                }),
-              );
-            }
-          });
+          // The overlapping shell circumferences are the bond paths. Shared electrons
+          // are rendered above them as the only bond marker, keeping the chemistry legible.
+          bondLayer.replaceChildren();
           subtitle.textContent = `${currentSpec.formula}  ·  ${currentSpec.bondLabel}  ·  ${currentSpec.sharedPairs} SHARED PAIR${currentSpec.sharedPairs === 1 ? "" : "S"}`;
           phaseText.textContent = formed
             ? "STABLE MOLECULE"
