@@ -2,6 +2,7 @@ import * as placeholders from "../placeholders/modules";
 import { physicsPendulum } from "../modules/physics-pendulum";
 import { physicsBuoyancy } from "../modules/physics-buoyancy";
 import { chemistryStates } from "../modules/chemistry-states-of-matter";
+import { chemistryBonding } from "../modules/chemistry-bonding";
 import type { SimulationModule, SubjectId } from "../types";
 
 /**
@@ -18,7 +19,7 @@ const modules: SimulationModule[] = [
   physicsPendulum,
   physicsBuoyancy,
   chemistryStates,
-  placeholders.chemistryBonding,
+  chemistryBonding,
   placeholders.biologyHeart,
   placeholders.biologyCell,
   placeholders.roboticsCircuit,
