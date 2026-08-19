@@ -125,6 +125,7 @@ function createStatesModule(): SimulationModule {
       let width = 800;
       let height = 600;
       let trend: "HEATING" | "COOLING" | "STABLE" = "STABLE";
+      let visualPhase = 1;
 
       const particles = Array.from({ length: PARTICLE_COUNT }, (_, index) => {
         const column = index % 12;
@@ -521,22 +522,24 @@ function createStatesModule(): SimulationModule {
       }
 
       function phaseStatus(): { label: string; detail: string; value: number; color: string } {
-        const value = phaseValue();
-        const meltBand = temperature >= material.melting - 8 && temperature <= material.melting + 8;
-        const boilBand =
-          temperature >= material.boiling - 10 && temperature <= material.boiling + 10;
-        if (meltBand && temperature < material.melting + 2)
-          return { label: "MELTING", detail: "Solid → Liquid", value, color: "#f2bd67" };
-        if (meltBand && temperature < material.melting - 2)
-          return { label: "FREEZING", detail: "Liquid → Solid", value, color: "#8fdcff" };
-        if (boilBand && temperature < material.boiling)
-          return { label: "EVAPORATION", detail: "Liquid → Gas", value, color: "#f2bd67" };
-        if (boilBand) return { label: "BOILING", detail: "Liquid → Gas", value, color: "#ff9a62" };
+        const target = phaseValue();
+        const value = visualPhase;
+        const transition = Math.abs(target - value) > 0.06;
+        if (transition && target > value + 0.06) {
+          return target > 1.45
+            ? { label: "BOILING", detail: "Liquid → Vapour", value, color: "#ff9a62" }
+            : { label: "MELTING", detail: "Ice → Water", value, color: "#f2bd67" };
+        }
+        if (transition && target < value - 0.06) {
+          return target < 0.5
+            ? { label: "FREEZING", detail: "Water → Ice", value, color: "#8fdcff" }
+            : { label: "CONDENSATION", detail: "Vapour → Water", value, color: "#8fdcff" };
+        }
         if (value < 0.5)
-          return { label: "SOLID", detail: "Ordered lattice", value, color: "#8fdcff" };
+          return { label: "SOLID", detail: "Ice crystal lattice", value, color: "#8fdcff" };
         if (value < 1.5)
-          return { label: "LIQUID", detail: "Close, flowing particles", value, color: "#73e4ff" };
-        return { label: "GAS", detail: "Rapid diffusion", value, color: "#f5c16c" };
+          return { label: "LIQUID", detail: "Contained water volume", value, color: "#73e4ff" };
+        return { label: "GAS", detail: "Water vapour diffusion", value, color: "#f5c16c" };
       }
 
       function energyLabel(): string {
@@ -711,6 +714,7 @@ function createStatesModule(): SimulationModule {
       }
 
       function updateReadout(time: number) {
+        const targetPhase = phaseValue();
         const status = phaseStatus();
         const energy = energyLabel();
         const glowAmount = clamp(
@@ -747,9 +751,11 @@ function createStatesModule(): SimulationModule {
               : "#58bde8",
         );
         temperatureGlow.setAttribute("fill-opacity", String(0.015 + glowAmount * 0.06));
-        const liquidAmount = clamp(status.value < 1 ? status.value : 2 - status.value, 0, 1);
-        const gasAmount = clamp(status.value - 1, 0, 1);
-        const solidAmount = clamp(1 - status.value, 0, 1);
+        const liquidProgress = clamp(visualPhase, 0, 1);
+        const gasProgress = clamp(visualPhase - 1, 0, 1);
+        const liquidAmount = liquidProgress * (1 - gasProgress);
+        const gasAmount = gasProgress;
+        const solidAmount = 1 - liquidProgress;
         const hotAmount = clamp(
           (temperature - material.melting) / Math.max(1, material.boiling - material.melting),
           0,
@@ -762,10 +768,10 @@ function createStatesModule(): SimulationModule {
         );
         liquidSurface.setAttribute("d", wavePath(time));
         liquidSurface.setAttribute("stroke", material.accent);
-        liquidSurface.setAttribute("stroke-opacity", String(0.15 + liquidAmount * 0.62));
+        liquidSurface.setAttribute("stroke-opacity", String(liquidAmount * 0.72));
         liquidShade.setAttribute("d", liquidPath(time));
         liquidShade.setAttribute("fill", material.tint);
-        liquidShade.setAttribute("fill-opacity", String(0.02 + liquidAmount * 0.17));
+        liquidShade.setAttribute("fill-opacity", String(liquidAmount * 0.17));
         liquidLabel.textContent =
           liquidAmount > 0.2
             ? `${(material.label.split(" /")[0] ?? material.label).toUpperCase()} / LIQUID LEVEL`
@@ -786,7 +792,8 @@ function createStatesModule(): SimulationModule {
           "fill-opacity",
           String(0.015 + Math.max(hotAmount, coldAmount) * 0.12),
         );
-        updateAttractions(status.value, glowAmount);
+        updateAttractions(visualPhase, glowAmount);
+        void targetPhase;
       }
 
       function publishGraph() {
@@ -801,6 +808,8 @@ function createStatesModule(): SimulationModule {
         );
         lastTimestamp = timestamp;
         if (running) {
+          const targetPhase = phaseValue();
+          visualPhase += (targetPhase - visualPhase) * Math.min(1, frameSeconds * 2.8);
           accumulator += frameSeconds;
           while (accumulator >= FIXED_STEP) {
             elapsed += FIXED_STEP;
@@ -814,7 +823,7 @@ function createStatesModule(): SimulationModule {
           }
         }
         const status = phaseStatus();
-        updateParticles(elapsed, frameSeconds, status.value);
+        updateParticles(elapsed, running ? frameSeconds : 0, visualPhase);
         updateReadout(elapsed);
         animationFrame = requestAnimationFrame(frame);
       }
@@ -824,6 +833,7 @@ function createStatesModule(): SimulationModule {
         accumulator = 0;
         uiAccumulator = 0;
         running = false;
+        visualPhase = phaseValue();
         host.replaceGraphData([]);
         updateMeasurements();
         updateReadout(0);
