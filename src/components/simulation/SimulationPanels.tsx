@@ -69,7 +69,9 @@ export function SimulationViewport({
       ? "plant"
       : normalizedCellType === "animal" || normalizedCellType === "animal cell"
         ? "animal"
-        : null;
+        : normalizedCellType === "bacterial" || normalizedCellType === "bacterial cell"
+          ? "bacterial"
+          : null;
   return (
     <section className="panel overflow-hidden">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -94,12 +96,16 @@ export function SimulationViewport({
               title={
                 selectedCellModel === "plant"
                   ? "Eukaryotic Plant Cell 3D model by jlf_illustration on Sketchfab"
-                  : "Animal Cell 3D model by aremay on Sketchfab"
+                  : selectedCellModel === "bacterial"
+                    ? "Bacterial cell structure 3D model by Ebers on Sketchfab"
+                    : "Animal Cell 3D model by aremay on Sketchfab"
               }
               src={
                 selectedCellModel === "plant"
                   ? "https://sketchfab.com/models/f258c65762e5435c9d58c1aa136b557a/embed?autospin=1"
-                  : "https://sketchfab.com/models/0b15c013059844d7a26c1f16752f8b61/embed"
+                  : selectedCellModel === "bacterial"
+                    ? "https://sketchfab.com/models/42439edc90cd4d87b8ae322a4dcee8de/embed"
+                    : "https://sketchfab.com/models/0b15c013059844d7a26c1f16752f8b61/embed"
               }
               className="absolute inset-0 h-full w-full border-0"
               allow="autoplay; fullscreen; xr-spatial-tracking"
@@ -110,7 +116,9 @@ export function SimulationViewport({
               href={
                 selectedCellModel === "plant"
                   ? "https://sketchfab.com/3d-models/eukaryotic-plant-cell-f258c65762e5435c9d58c1aa136b557a"
-                  : "https://sketchfab.com/3d-models/animal-cell-0b15c013059844d7a26c1f16752f8b61"
+                  : selectedCellModel === "bacterial"
+                    ? "https://sketchfab.com/3d-models/bacterial-cell-structure-42439edc90cd4d87b8ae322a4dcee8de"
+                    : "https://sketchfab.com/3d-models/animal-cell-0b15c013059844d7a26c1f16752f8b61"
               }
               target="_blank"
               rel="noreferrer"
@@ -118,7 +126,9 @@ export function SimulationViewport({
             >
               {selectedCellModel === "plant"
                 ? "Eukaryotic Plant Cell · Sketchfab · by jlf_illustration"
-                : "Animal Cell · Sketchfab · by aremay"}
+                : selectedCellModel === "bacterial"
+                  ? "Bacterial cell structure · Sketchfab · by Ebers"
+                  : "Animal Cell · Sketchfab · by aremay"}
             </a>
           </div>
         ) : (
