@@ -253,11 +253,11 @@ export const chemistryBonding: SimulationModule = createPlaceholderModule({
       label: "Atom A",
       options: [
         { value: "H", label: "Hydrogen" },
-        { value: "Na", label: "Sodium" },
+        { value: "Cl", label: "Chlorine" },
         { value: "C", label: "Carbon" },
         { value: "O", label: "Oxygen" },
       ],
-      defaultValue: "Na",
+      defaultValue: "Cl",
       group: "Atoms",
     },
     {
