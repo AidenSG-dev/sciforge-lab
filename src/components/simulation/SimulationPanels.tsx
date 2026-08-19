@@ -83,6 +83,7 @@ export function SimulationViewport({
         {simulationId === "biology-cell" && (cellType === "animal" || cellType === "plant") ? (
           <div className="absolute inset-0 bg-background">
             <iframe
+              key={cellType}
               title={
                 cellType === "plant"
                   ? "Eukaryotic Plant Cell 3D model by jlf_illustration on Sketchfab"
