@@ -370,7 +370,7 @@ function createBondingModule(): SimulationModule {
       const atomLayer = svg("g", {});
       const infoPanel = svg("rect", {
         x: "32",
-        y: "398",
+        y: "438",
         width: "226",
         height: "138",
         rx: "14",
@@ -381,7 +381,7 @@ function createBondingModule(): SimulationModule {
       });
       const infoText = svg("text", {
         x: "52",
-        y: "428",
+        y: "468",
         fill: "#dff8ff",
         "font-family": "ui-monospace, SFMono-Regular, Menlo, monospace",
         "font-size": "11",
@@ -456,13 +456,17 @@ function createBondingModule(): SimulationModule {
                     { x: 400, y: 500 },
                   ];
         const moleculeFormula = spec?.formula;
+        const outerRadiusFor = (symbol: AtomId | undefined) =>
+          (ATOMS[symbol ?? "H"]?.shells.length ?? 1) > 1 ? 80 : 60;
         const bondedOuterRadius = Math.max(
           60,
-          ...(spec?.atoms ?? []).map((symbol) =>
-            (ATOMS[symbol]?.shells.length ?? 1) > 1 ? 80 : 60,
-          ),
+          ...(spec?.atoms ?? []).map((symbol) => outerRadiusFor(symbol)),
         );
-        const finalCenterDistance = bondedOuterRadius * 2 - 10;
+        const diatomicOuterSum =
+          count === 2
+            ? outerRadiusFor(spec?.atoms[0]) + outerRadiusFor(spec?.atoms[1])
+            : bondedOuterRadius * 2;
+        const finalCenterDistance = diatomicOuterSum - 10;
         const final: Array<{ x: number; y: number }> =
           count === 2
             ? [
@@ -472,8 +476,8 @@ function createBondingModule(): SimulationModule {
             : moleculeFormula === "H₂O"
               ? [
                   { x: 400, y: 300 },
-                  { x: 335, y: 365 },
-                  { x: 465, y: 365 },
+                  { x: 330, y: 395 },
+                  { x: 470, y: 395 },
                 ]
               : moleculeFormula === "CO₂"
                 ? [
@@ -484,17 +488,17 @@ function createBondingModule(): SimulationModule {
                 : moleculeFormula === "NH₃"
                   ? [
                       { x: 400, y: 300 },
-                      { x: 320, y: 365 },
-                      { x: 480, y: 365 },
-                      { x: 400, y: 410 },
+                      { x: 400, y: 165 },
+                      { x: 270, y: 320 },
+                      { x: 530, y: 320 },
                     ]
                   : moleculeFormula === "CH₄"
                     ? [
                         { x: 400, y: 300 },
-                        { x: 400, y: 205 },
-                        { x: 315, y: 340 },
-                        { x: 485, y: 340 },
-                        { x: 400, y: 420 },
+                        { x: 400, y: 165 },
+                        { x: 265, y: 300 },
+                        { x: 535, y: 300 },
+                        { x: 400, y: 435 },
                       ]
                     : [{ x: 400, y: 300 }];
         return final.map((point, index) => {
@@ -627,7 +631,13 @@ function createBondingModule(): SimulationModule {
                   const otherPoint = atomPositions[otherIndex] ?? point;
                   const bondAngle = Math.atan2(otherPoint.y - point.y, otherPoint.x - point.x);
                   const directionalSlots = [0, -Math.PI / 2, Math.PI, Math.PI / 2];
-                  angle = bondAngle + (directionalSlots[orbitalGroup] ?? 0) + inPair * 0.14;
+                  const isNonBondingPair = !inUnpairedGroup && connection.order > 1;
+                  const nonBondingAngle =
+                    orbitalGroup - unpairedCount === 0 ? -Math.PI / 2 : Math.PI / 2;
+                  angle =
+                    bondAngle +
+                    (isNonBondingPair ? nonBondingAngle : (directionalSlots[orbitalGroup] ?? 0)) +
+                    inPair * 0.14;
                 } else {
                   angle +=
                     shellTime * (isInnerShell ? 0.0003 : 0.0002) * (index % 2 === 0 ? 1 : -1);
@@ -669,9 +679,15 @@ function createBondingModule(): SimulationModule {
                     selectedConnection.order === 1
                       ? memberSign * 20
                       : (pairInConnection - (selectedConnection.order - 1) / 2) * 14;
+                  const bondUnitX = dx / length;
+                  const bondUnitY = dy / length;
+                  const sharedAxisOffset =
+                    selectedConnection.order > 1
+                      ? (selectedConnection.a === index ? -1 : 1) * 7
+                      : 0;
                   const target = {
-                    x: overlapCenterX + normalX * overlapOffset,
-                    y: overlapCenterY + normalY * overlapOffset,
+                    x: overlapCenterX + normalX * overlapOffset + bondUnitX * sharedAxisOffset,
+                    y: overlapCenterY + normalY * overlapOffset + bondUnitY * sharedAxisOffset,
                   };
                   targetX = orbitX + (target.x - orbitX) * shareProgress;
                   targetY = orbitY + (target.y - orbitY) * shareProgress;
