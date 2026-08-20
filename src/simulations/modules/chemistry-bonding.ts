@@ -614,10 +614,22 @@ function createBondingModule(): SimulationModule {
                   ? electron
                   : unpairedCount + Math.floor((electron - unpairedCount) / 2);
                 const inPair = inUnpairedGroup ? 0 : (electron - unpairedCount) % 2;
-                const angle =
-                  (orbitalGroup / Math.max(1, orbitalGroupCount)) * Math.PI * 2 +
-                  inPair * 0.14 +
-                  shellTime * (isInnerShell ? 0.0003 : 0.0002) * (index % 2 === 0 ? 1 : -1);
+                let angle =
+                  (orbitalGroup / Math.max(1, orbitalGroupCount)) * Math.PI * 2 + inPair * 0.14;
+                if (isInnerShell && shellElectrons === 2) {
+                  // K-shell electrons are an opposite pair, never stacked together.
+                  angle = (electron === 0 ? 0 : Math.PI) + shellTime * 0.0003;
+                } else if (isValenceShell && connectionsForAtom.length === 1) {
+                  const connection = connectionsForAtom[0]!;
+                  const otherIndex = connection.a === index ? connection.b : connection.a;
+                  const otherPoint = atomPositions[otherIndex] ?? point;
+                  const bondAngle = Math.atan2(otherPoint.y - point.y, otherPoint.x - point.x);
+                  const directionalSlots = [0, -Math.PI / 2, Math.PI, Math.PI / 2];
+                  angle = bondAngle + (directionalSlots[orbitalGroup] ?? 0) + inPair * 0.14;
+                } else {
+                  angle +=
+                    shellTime * (isInnerShell ? 0.0003 : 0.0002) * (index % 2 === 0 ? 1 : -1);
+                }
                 const orbitX = x + Math.cos(angle) * radius;
                 const orbitY = y + Math.sin(angle) * radius;
                 const highlighted =
@@ -647,14 +659,16 @@ function createBondingModule(): SimulationModule {
                   const normalY = dx / length;
                   const overlapCenterX = (x + otherPoint.x) / 2;
                   const overlapCenterY = (y + otherPoint.y) / 2;
-                  const overlapOffset =
-                    (pairInConnection - (selectedConnection.order - 1) / 2) * 11;
                   const memberSign = selectedConnection.a === index ? -1 : 1;
+                  const overlapOffset =
+                    selectedConnection.order === 1
+                      ? memberSign * 8
+                      : (pairInConnection - (selectedConnection.order - 1) / 2) * 11;
                   const bondUnitX = dx / length;
                   const bondUnitY = dy / length;
                   const target = {
-                    x: overlapCenterX + normalX * overlapOffset + bondUnitX * memberSign * 5,
-                    y: overlapCenterY + normalY * overlapOffset + bondUnitY * memberSign * 5,
+                    x: overlapCenterX + normalX * overlapOffset + bondUnitX * memberSign * 2,
+                    y: overlapCenterY + normalY * overlapOffset + bondUnitY * memberSign * 2,
                   };
                   targetX = orbitX + (target.x - orbitX) * shareProgress;
                   targetY = orbitY + (target.y - orbitY) * shareProgress;
