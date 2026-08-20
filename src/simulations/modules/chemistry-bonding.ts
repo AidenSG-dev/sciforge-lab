@@ -225,6 +225,7 @@ function createBondingModule(): SimulationModule {
           { value: "C", label: "Carbon" },
           { value: "O", label: "Oxygen" },
           { value: "Cl", label: "Chlorine" },
+          { value: "N", label: "Nitrogen" },
         ],
         defaultValue: DEFAULTS.atomA,
         group: "Atoms",
@@ -235,6 +236,7 @@ function createBondingModule(): SimulationModule {
         label: "Atom B",
         options: [
           { value: "H", label: "Hydrogen" },
+          { value: "C", label: "Carbon" },
           { value: "Cl", label: "Chlorine" },
           { value: "N", label: "Nitrogen" },
           { value: "O", label: "Oxygen" },
