@@ -4,6 +4,7 @@ import { physicsBuoyancy } from "../modules/physics-buoyancy";
 import { chemistryStates } from "../modules/chemistry-states-of-matter";
 import { chemistryBonding } from "../modules/chemistry-bonding";
 import { roboticsCircuit } from "../modules/robotics-circuit";
+import { biologyHeart } from "../modules/biology-heart";
 import type { SimulationModule, SubjectId } from "../types";
 
 /**
@@ -21,7 +22,7 @@ const modules: SimulationModule[] = [
   physicsBuoyancy,
   chemistryStates,
   chemistryBonding,
-  placeholders.biologyHeart,
+  biologyHeart,
   placeholders.biologyCell,
   roboticsCircuit,
   placeholders.roboticsObstacleRobot,
