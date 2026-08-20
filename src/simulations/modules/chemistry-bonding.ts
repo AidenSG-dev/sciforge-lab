@@ -575,7 +575,8 @@ function createBondingModule(): SimulationModule {
             data.shells.forEach((shellElectrons, shellIndex) => {
               const isInnerShell = shellIndex === 0;
               const isValenceShell = shellIndex === data.shells.length - 1;
-              const radius = 39 + shellIndex * 20;
+              // Keep K/L shells compact and non-overlapping; only the valence shell is wide enough to form the bond lens.
+              const radius = isValenceShell ? 60 : 29 + shellIndex * 6;
               const shellRotation = running && (isInnerShell ? data.shells.length > 1 : !formed);
               const shellTime = shellRotation ? now : 0;
               atomLayer.append(
@@ -585,10 +586,9 @@ function createBondingModule(): SimulationModule {
                   r: String(radius),
                   fill: "none",
                   stroke: isValenceShell ? data.color : "#c9e8ff",
-                  "stroke-opacity": isValenceShell ? "0.74" : "0.56",
-                  "stroke-width": isValenceShell ? "2.2" : "1.8",
-                  "stroke-dasharray": isValenceShell ? "7 5" : "none",
-                  ...(isInnerShell ? { filter: "url(#bond-glow)" } : {}),
+                  "stroke-opacity": isValenceShell ? "0.88" : "0.72",
+                  "stroke-width": isValenceShell ? "2.4" : "2",
+                  "stroke-dasharray": isValenceShell ? "8 6" : "none",
                 }),
               );
               if (!showElectrons) return;
@@ -655,9 +655,8 @@ function createBondingModule(): SimulationModule {
                     cx: String(targetX),
                     cy: String(targetY),
                     r: highlighted ? "5" : "3.5",
-                    fill: highlighted ? "#ffe36e" : "#f3fbff",
-                    "fill-opacity": highlighted ? String(0.78 + shareProgress * 0.22) : "0.82",
-                    ...(highlighted ? { filter: "url(#bond-glow)" } : {}),
+                    fill: highlighted ? "#ffd83d" : "#f3fbff",
+                    "fill-opacity": highlighted ? "1" : "0.86",
                   }),
                 );
               }
@@ -666,7 +665,7 @@ function createBondingModule(): SimulationModule {
               svg("circle", {
                 cx: String(x),
                 cy: String(y),
-                r: "31",
+                r: "20",
                 fill: "#0b1626",
                 stroke: data.color,
                 "stroke-width": "2",
