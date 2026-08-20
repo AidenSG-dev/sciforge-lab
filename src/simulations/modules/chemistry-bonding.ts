@@ -652,9 +652,12 @@ function createBondingModule(): SimulationModule {
                   const otherIndex =
                     selectedConnection.a === index ? selectedConnection.b : selectedConnection.a;
                   const otherPoint = atomPositions[otherIndex] ?? point;
-                  const dx = otherPoint.x - point.x;
-                  const dy = otherPoint.y - point.y;
+                  const bondStart = atomPositions[selectedConnection.a] ?? point;
+                  const bondEnd = atomPositions[selectedConnection.b] ?? otherPoint;
+                  const dx = bondEnd.x - bondStart.x;
+                  const dy = bondEnd.y - bondStart.y;
                   const length = Math.max(1, Math.hypot(dx, dy));
+                  // Use one canonical normal for both atoms so the pair is always opposite: top/bottom for a horizontal bond.
                   const normalX = -dy / length;
                   const normalY = dx / length;
                   const overlapCenterX = (x + otherPoint.x) / 2;
