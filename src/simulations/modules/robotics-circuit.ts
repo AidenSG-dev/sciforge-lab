@@ -1,5 +1,4 @@
 import type {
-  GraphSample,
   MountContext,
   ParamValue,
   SimulationInstance,
@@ -7,691 +6,639 @@ import type {
   SimulationParams,
 } from "../types";
 
-const DEFAULTS = {
-  supplyVoltage: 5,
-  bulbCount: 1,
-  switchClosed: true,
-  topology: "series",
-  view: "physical",
-  material: "copper",
-  ammeter: true,
-  voltmeter: true,
-  fuse: false,
-  showCurrent: true,
-} as const;
-
-type Topology = "series" | "parallel";
+const DEFAULTS = { supplyVoltage: 5, view: "physical", showCurrent: true } as const;
 type ViewMode = "physical" | "diagram";
-type Material = "copper" | "aluminium" | "iron" | "plastic" | "rubber" | "wood";
-
-function num(params: SimulationParams, id: string, fallback: number) {
-  return typeof params[id] === "number" && Number.isFinite(params[id]) ? params[id] : fallback;
+type Kind =
+  | "battery"
+  | "switch"
+  | "bulb"
+  | "resistor"
+  | "variable"
+  | "ammeter"
+  | "voltmeter"
+  | "fuse"
+  | "terminal";
+interface Node {
+  id: number;
+  kind: Kind;
+  x: number;
+  y: number;
+  rotation: number;
+  closed: boolean;
+  resistance: number;
 }
-function bool(params: SimulationParams, id: string, fallback: boolean) {
-  return typeof params[id] === "boolean" ? params[id] : fallback;
+interface Wire {
+  id: number;
+  a: { node: number; terminal: number };
+  b: { node: number; terminal: number };
 }
-function str(params: SimulationParams, id: string, fallback: string) {
-  return typeof params[id] === "string" ? params[id] : fallback;
+const library: Array<{ kind: Kind | "wire"; label: string; symbol: string }> = [
+  { kind: "battery", label: "Cell / Battery", symbol: "▯" },
+  { kind: "switch", label: "Switch", symbol: "⌁" },
+  { kind: "bulb", label: "Bulb", symbol: "◉" },
+  { kind: "resistor", label: "Resistor", symbol: "▱" },
+  { kind: "variable", label: "Variable resistor", symbol: "↗▱" },
+  { kind: "ammeter", label: "Ammeter", symbol: "A" },
+  { kind: "voltmeter", label: "Voltmeter", symbol: "V" },
+  { kind: "fuse", label: "Fuse", symbol: "—▣—" },
+  { kind: "terminal", label: "Open terminal", symbol: "○" },
+  { kind: "wire", label: "Connecting wire", symbol: "╱" },
+];
+function num(p: SimulationParams, id: string, f: number) {
+  return typeof p[id] === "number" && Number.isFinite(p[id]) ? p[id] : f;
 }
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
+function bool(p: SimulationParams, id: string, f: boolean) {
+  return typeof p[id] === "boolean" ? p[id] : f;
+}
+function str(p: SimulationParams, id: string, f: string) {
+  return typeof p[id] === "string" ? p[id] : f;
+}
+function clamp(v: number, a: number, b: number) {
+  return Math.max(a, Math.min(b, v));
 }
 function svg<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string>) {
-  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
-  Object.entries(attrs).forEach(([key, value]) => el.setAttribute(key, value));
-  return el as SVGElementTagNameMap[K];
+  const n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  Object.entries(attrs).forEach(([k, v]) => n.setAttribute(k, v));
+  return n as SVGElementTagNameMap[K];
 }
 
-const MATERIALS: Record<Material, { label: string; conducting: boolean; color: string }> = {
-  copper: { label: "Copper", conducting: true, color: "#d98b52" },
-  aluminium: { label: "Aluminium", conducting: true, color: "#b7c9d8" },
-  iron: { label: "Iron", conducting: true, color: "#8f9aaa" },
-  plastic: { label: "Plastic", conducting: false, color: "#db6f87" },
-  rubber: { label: "Rubber", conducting: false, color: "#a46de0" },
-  wood: { label: "Wood", conducting: false, color: "#b98654" },
-};
-
-function createCircuitModule(): SimulationModule {
-  return {
-    id: "robotics-circuit",
-    subject: "robotics",
-    title: "Physics Circuits Lab",
-    description: "Build a complete circuit, open the path and see current respond.",
-    concepts: ["Closed circuits", "Current flow", "Voltage", "Circuit components"],
-    grade: "6-8",
-    layout: "robotics",
-    status: "ready",
-    aspectRatio: 4 / 3,
-    controls: [
-      {
-        kind: "slider",
-        id: "supplyVoltage",
-        label: "Battery Voltage",
-        min: 1.5,
-        max: 12,
-        step: 0.5,
-        unit: "V",
-        defaultValue: DEFAULTS.supplyVoltage,
-        group: "Power",
-      },
-      {
-        kind: "number",
-        id: "bulbCount",
-        label: "Bulbs in circuit",
-        min: 1,
-        max: 2,
-        step: 1,
-        defaultValue: DEFAULTS.bulbCount,
-        group: "Build",
-      },
-      {
-        kind: "toggle",
-        id: "switchClosed",
-        label: "Close switch",
-        defaultValue: DEFAULTS.switchClosed,
-        group: "Build",
-      },
-      {
-        kind: "select",
-        id: "topology",
-        label: "Circuit arrangement",
-        options: [
-          { value: "series", label: "Series circuit" },
-          { value: "parallel", label: "Parallel circuit" },
-        ],
-        defaultValue: DEFAULTS.topology,
-        group: "Build",
-      },
-      {
-        kind: "select",
-        id: "material",
-        label: "Test wire material",
-        options: Object.entries(MATERIALS).map(([value, item]) => ({ value, label: item.label })),
-        defaultValue: DEFAULTS.material,
-        group: "Materials",
-      },
-      {
-        kind: "select",
-        id: "view",
-        label: "Lab view",
-        options: [
-          { value: "physical", label: "Physical lab" },
-          { value: "diagram", label: "Circuit diagram" },
-        ],
-        defaultValue: DEFAULTS.view,
-        group: "Display",
-      },
-      {
-        kind: "checkbox",
-        id: "ammeter",
-        label: "Place ammeter",
-        defaultValue: DEFAULTS.ammeter,
-        group: "Instruments",
-      },
-      {
-        kind: "checkbox",
-        id: "voltmeter",
-        label: "Place voltmeter",
-        defaultValue: DEFAULTS.voltmeter,
-        group: "Instruments",
-      },
-      {
-        kind: "checkbox",
-        id: "fuse",
-        label: "Add safety fuse",
-        defaultValue: DEFAULTS.fuse,
-        group: "Components",
-      },
-      {
-        kind: "checkbox",
-        id: "showCurrent",
-        label: "Animate current flow",
-        defaultValue: DEFAULTS.showCurrent,
-        group: "Display",
-      },
-      {
-        kind: "button",
-        id: "resetCircuit",
-        label: "Reset circuit",
-        actionId: "resetCircuit",
-        variant: "subject",
-        group: "Experiment",
-      },
-    ],
-    graph: {
-      title: "Current vs time",
-      xLabel: "Time (s)",
-      yLabel: "Current (A)",
-      series: [{ id: "current", label: "Current", colorToken: 4 }],
-      window: 180,
+export const roboticsCircuit: SimulationModule = {
+  id: "robotics-circuit",
+  subject: "robotics",
+  title: "Physics Circuits Lab",
+  description: "Build, run, measure and modify your own school physics circuit.",
+  concepts: ["Closed circuits", "Current", "Ohm's law", "Series and parallel paths"],
+  grade: "6-8",
+  layout: "robotics",
+  status: "ready",
+  aspectRatio: 4 / 3,
+  controls: [
+    {
+      kind: "slider",
+      id: "supplyVoltage",
+      label: "Battery Voltage",
+      min: 1.5,
+      max: 12,
+      step: 0.5,
+      unit: "V",
+      defaultValue: 5,
+      group: "Power",
     },
-    explanation: {
-      whatsHappening:
-        "Close the switch to complete the path. Current flows through the components and the bulb lights.",
-      keyConcept:
-        "A closed circuit has one or more complete conducting paths from the battery back to the battery.",
-      deeperDive:
-        "In this school-level model, bulb brightness follows current. A series circuit has one path; a parallel circuit splits current between branches.",
-      formula: "I = V / R",
+    {
+      kind: "select",
+      id: "view",
+      label: "Lab view",
+      options: [
+        { value: "physical", label: "Physical lab" },
+        { value: "diagram", label: "Circuit diagram" },
+      ],
+      defaultValue: "physical",
+      group: "Display",
     },
-    mount({ container, host, params: initialParams }: MountContext): SimulationInstance {
-      let params = { ...initialParams };
-      let running = false;
-      let raf = 0;
-      let lastTime = performance.now();
-      let elapsed = 0;
-      let graphAccumulator = 0;
-      let width = 800;
-      let height = 600;
-      const root = document.createElement("div");
-      root.className = "absolute inset-0 overflow-hidden";
-      container.replaceChildren(root);
-      const scene = svg("svg", {
-        viewBox: "0 0 800 600",
-        class: "h-full w-full",
-        role: "img",
-        "aria-label": "Interactive school physics circuit lab",
-        preserveAspectRatio: "xMidYMid meet",
+    {
+      kind: "checkbox",
+      id: "showCurrent",
+      label: "Animate current flow",
+      defaultValue: true,
+      group: "Display",
+    },
+    {
+      kind: "button",
+      id: "runExperiment",
+      label: "▶ RUN EXPERIMENT",
+      actionId: "runExperiment",
+      variant: "subject",
+      group: "Experiment",
+    },
+    {
+      kind: "button",
+      id: "resetCircuit",
+      label: "Reset blank workspace",
+      actionId: "resetCircuit",
+      variant: "outline",
+      group: "Experiment",
+    },
+  ],
+  graph: {
+    title: "Current vs time",
+    xLabel: "Time (s)",
+    yLabel: "Current (A)",
+    series: [{ id: "current", label: "Current", colorToken: 4 }],
+    window: 180,
+  },
+  explanation: {
+    whatsHappening:
+      "Start with an empty workspace. Drag components from the library, connect terminals, then run the experiment.",
+    keyConcept:
+      "A closed conducting path lets current flow from one battery terminal and back to the other.",
+    deeperDive:
+      "Use Ohm's law, I = V/R, for the simplified school-level model. Series components share one current; parallel branches divide current.",
+    formula: "V = I × R",
+  },
+  mount({ container, host, params: initial }: MountContext): SimulationInstance {
+    let params = { ...initial };
+    let nodes: Node[] = [];
+    let wires: Wire[] = [];
+    let nextId = 1;
+    let nextWire = 1;
+    let running = false;
+    let elapsed = 0;
+    let last = performance.now();
+    let raf = 0;
+    let graphClock = 0;
+    let selectedTerminal: { node: number; terminal: number } | null = null;
+    let drag: { node: number; dx: number; dy: number } | null = null;
+    let width = 800;
+    let height = 600;
+    const root = document.createElement("div");
+    root.className = "absolute inset-0 overflow-hidden";
+    container.replaceChildren(root);
+    const scene = svg("svg", {
+      viewBox: "0 0 1000 680",
+      class: "h-full w-full",
+      role: "img",
+      "aria-label": "Build your own school physics circuit",
+    });
+    root.append(scene);
+    const defs = svg("defs", {});
+    const bg = svg("linearGradient", { id: "lab-bg", x1: "0", y1: "0", x2: "0", y2: "1" });
+    bg.append(
+      svg("stop", { offset: "0%", "stop-color": "#101d35" }),
+      svg("stop", { offset: "100%", "stop-color": "#070c17" }),
+    );
+    const grid = svg("pattern", {
+      id: "lab-grid",
+      width: "32",
+      height: "32",
+      patternUnits: "userSpaceOnUse",
+    });
+    grid.append(
+      svg("path", { d: "M32 0H0V32", fill: "none", stroke: "#8dbbe0", "stroke-opacity": "0.08" }),
+    );
+    const glow = svg("filter", {
+      id: "lab-glow",
+      x: "-100%",
+      y: "-100%",
+      width: "300%",
+      height: "300%",
+    });
+    glow.append(svg("feGaussianBlur", { stdDeviation: "7" }));
+    defs.append(bg, grid, glow);
+    scene.append(
+      defs,
+      svg("rect", { width: "1000", height: "680", fill: "url(#lab-bg)" }),
+      svg("rect", { width: "1000", height: "680", fill: "url(#lab-grid)" }),
+    );
+    const wireLayer = svg("g", {}),
+      flowLayer = svg("g", {}),
+      nodeLayer = svg("g", {}),
+      uiLayer = svg("g", {});
+    scene.append(wireLayer, flowLayer, nodeLayer, uiLayer);
+    const label = (
+      x: number,
+      y: number,
+      s: string,
+      fill = "#dff8ff",
+      size = 12,
+      anchor = "start",
+    ) => {
+      const t = svg("text", {
+        x: String(x),
+        y: String(y),
+        fill,
+        "font-family": "ui-monospace, SFMono-Regular, Menlo, monospace",
+        "font-size": String(size),
+        "text-anchor": anchor,
       });
-      const defs = svg("defs", {});
-      const bg = svg("linearGradient", { id: "circuit-bg", x1: "0", y1: "0", x2: "0", y2: "1" });
-      bg.append(
-        svg("stop", { offset: "0%", "stop-color": "#101b33" }),
-        svg("stop", { offset: "100%", "stop-color": "#070c18" }),
+      t.textContent = s;
+      return t;
+    };
+    function add(kind: Kind, x: number, y: number) {
+      const n: Node = {
+        id: nextId++,
+        kind,
+        x,
+        y,
+        rotation: 0,
+        closed: kind !== "switch" || true,
+        resistance:
+          kind === "resistor"
+            ? 100
+            : kind === "variable"
+              ? 220
+              : kind === "bulb"
+                ? 80
+                : kind === "fuse"
+                  ? 10
+                  : 0,
+      };
+      nodes.push(n);
+      draw();
+      return n;
+    }
+    function reset() {
+      nodes = [];
+      wires = [];
+      nextId = 1;
+      nextWire = 1;
+      selectedTerminal = null;
+      running = false;
+      elapsed = 0;
+      host.replaceGraphData([]);
+      host.setRunning(false);
+      publish();
+      draw();
+    }
+    function nodeBy(id: number) {
+      return nodes.find((n) => n.id === id);
+    }
+    function terminals(n: Node) {
+      return [
+        { x: n.x - 34, y: n.y },
+        { x: n.x + 34, y: n.y },
+      ];
+    }
+    function connected(
+      a: { node: number; terminal: number },
+      b: { node: number; terminal: number },
+    ) {
+      return wires.some(
+        (w) =>
+          (w.a.node === a.node &&
+            w.a.terminal === a.terminal &&
+            w.b.node === b.node &&
+            w.b.terminal === b.terminal) ||
+          (w.b.node === a.node &&
+            w.b.terminal === a.terminal &&
+            w.a.node === b.node &&
+            w.a.terminal === b.terminal),
       );
-      const grid = svg("pattern", {
-        id: "circuit-grid",
-        width: "32",
-        height: "32",
-        patternUnits: "userSpaceOnUse",
+    }
+    function attach(a: { node: number; terminal: number }, b: { node: number; terminal: number }) {
+      if (a.node === b.node || connected(a, b)) return;
+      wires.push({ id: nextWire++, a, b });
+      selectedTerminal = null;
+      draw();
+    }
+    function componentResistance(n: Node) {
+      return n.resistance ?? 0;
+    }
+    function analyze() {
+      const battery = nodes.find((n) => n.kind === "battery");
+      const bulbs = nodes.filter((n) => n.kind === "bulb");
+      const switches = nodes.filter((n) => n.kind === "switch");
+      const fuse = nodes.find((n) => n.kind === "fuse");
+      const hasOpenSwitch = switches.some((n) => n.closed === false);
+      const hasInsufficient = !battery || bulbs.length === 0 || hasOpenSwitch || !wires.length;
+      const resistance = nodes
+        .filter((n) => ["bulb", "resistor", "variable", "fuse"].includes(n.kind))
+        .reduce((a, n) => a + componentResistance(n), 1);
+      const voltage = num(params, "supplyVoltage", 5);
+      const current =
+        hasInsufficient || (fuse && voltage / resistance > 0.08) ? 0 : voltage / resistance;
+      const fuseBlown = Boolean(fuse && voltage / resistance > 0.08);
+      return {
+        battery,
+        bulbs,
+        switches,
+        fuse,
+        voltage,
+        resistance,
+        current,
+        closed: current > 0 && !fuseBlown,
+        fuseBlown,
+      };
+    }
+    function publish() {
+      const a = analyze();
+      host.publishMeasurements([
+        {
+          id: "state",
+          label: "Circuit state",
+          value: a.closed ? "CLOSED" : "OPEN",
+          emphasis: true,
+        },
+        { id: "voltage", label: "Voltage", value: a.voltage, unit: "V", precision: 1 },
+        { id: "current", label: "Current", value: a.current, unit: "A", precision: 3 },
+        { id: "resistance", label: "Resistance", value: a.resistance, unit: "Ω", precision: 0 },
+        { id: "power", label: "Power", value: a.voltage * a.current, unit: "W", precision: 3 },
+        { id: "components", label: "Components", value: nodes.length, precision: 0 },
+      ]);
+      host.publishExplanation({
+        whatsHappening: a.closed
+          ? "CIRCUIT CLOSED: the built path is complete, so current flows through the components."
+          : nodes.length === 0
+            ? "Blank workspace: drag a battery, switch and bulb from the component library, then connect their terminals."
+            : a.fuseBlown
+              ? "FAULT: the simplified fuse limit was exceeded. The fuse opens and current stops."
+              : "CIRCUIT OPEN: add wires, close switches and complete a path from battery to battery.",
       });
-      grid.append(
-        svg("path", {
-          d: "M 32 0 L 0 0 0 32",
-          fill: "none",
-          stroke: "#8cb9e8",
-          "stroke-opacity": "0.08",
+    }
+    function drawComponent(n: Node, a: ReturnType<typeof analyze>, diagram: boolean) {
+      const on = a.closed && (n.kind === "bulb" || n.kind === "ammeter");
+      const r = n.kind === "battery" ? 28 : 24;
+      if (on && !diagram)
+        nodeLayer.append(
+          svg("circle", {
+            cx: String(n.x),
+            cy: String(n.y),
+            r: "34",
+            fill: "#ffd34e",
+            "fill-opacity": "0.22",
+            filter: "url(#lab-glow)",
+          }),
+        );
+      const stroke = on
+        ? "#ffe78b"
+        : n.kind === "switch" && n.closed === false
+          ? "#ff9a88"
+          : "#a6bdd1";
+      nodeLayer.append(
+        svg("rect", {
+          x: String(n.x - r),
+          y: String(n.y - r),
+          width: String(r * 2),
+          height: String(r * 2),
+          rx: "12",
+          fill: diagram ? "none" : "#102234",
+          stroke,
+          "stroke-width": "3",
         }),
       );
-      const glow = svg("filter", {
-        id: "bulb-glow",
-        x: "-100%",
-        y: "-100%",
-        width: "300%",
-        height: "300%",
-      });
-      glow.append(svg("feGaussianBlur", { stdDeviation: "7" }));
-      defs.append(bg, grid, glow);
-      scene.append(
-        defs,
-        svg("rect", { width: "800", height: "600", fill: "url(#circuit-bg)" }),
-        svg("rect", { width: "800", height: "600", fill: "url(#circuit-grid)" }),
+      let symbol =
+        n.kind === "battery"
+          ? "CELL"
+          : n.kind === "bulb"
+            ? "◉"
+            : n.kind === "switch"
+              ? "⌁"
+              : n.kind === "ammeter"
+                ? "A"
+                : n.kind === "voltmeter"
+                  ? "V"
+                  : n.kind === "fuse"
+                    ? "▣"
+                    : n.kind === "variable"
+                      ? "R↗"
+                      : n.kind === "resistor"
+                        ? "R"
+                        : "○";
+      if (diagram && n.kind === "battery") symbol = "—| |—";
+      const t = label(
+        n.x,
+        n.y + 6,
+        symbol,
+        on ? "#fff4ad" : "#d8eef7",
+        n.kind === "battery" ? 10 : 20,
+        "middle",
       );
-      const wireLayer = svg("g", {});
-      const flowLayer = svg("g", {});
-      const componentLayer = svg("g", {});
-      const labelLayer = svg("g", {});
-      scene.append(wireLayer, flowLayer, componentLayer, labelLayer);
-      root.append(scene);
-
-      const text = (
-        x: number,
-        y: number,
-        value: string,
-        fill = "#dff8ff",
-        size = 11,
-        anchor = "start",
-      ) => {
-        const node = svg("text", {
-          x: String(x),
-          y: String(y),
-          fill,
-          "font-family": "ui-monospace, SFMono-Regular, Menlo, monospace",
-          "font-size": String(size),
-          "text-anchor": anchor,
+      nodeLayer.append(t);
+      const ts = terminals(n);
+      ts.forEach((p, i) => {
+        const term = svg("circle", {
+          cx: String(p.x),
+          cy: String(p.y),
+          r: selectedTerminal?.node === n.id && selectedTerminal.terminal === i ? "9" : "6",
+          fill:
+            selectedTerminal?.node === n.id && selectedTerminal.terminal === i
+              ? "#ffd34e"
+              : "#8ce8ff",
+          stroke: "#07121f",
+          "stroke-width": "2",
         });
-        node.textContent = value;
-        return node;
-      };
-      const line = (
-        x1: number,
-        y1: number,
-        x2: number,
-        y2: number,
-        stroke: string,
-        widthValue = 4,
-        dash = "",
-      ) =>
-        svg("line", {
-          x1: String(x1),
-          y1: String(y1),
-          x2: String(x2),
-          y2: String(y2),
-          stroke,
-          "stroke-width": String(widthValue),
-          "stroke-linecap": "round",
-          ...(dash ? { "stroke-dasharray": dash } : {}),
-        });
-      const path = (d: string, stroke: string, widthValue = 4, dash = "") =>
-        svg("path", {
-          d,
-          fill: "none",
-          stroke,
-          "stroke-width": String(widthValue),
-          "stroke-linecap": "round",
-          "stroke-linejoin": "round",
-          ...(dash ? { "stroke-dasharray": dash } : {}),
-        });
-
-      function state() {
-        const voltage = num(params, "supplyVoltage", DEFAULTS.supplyVoltage);
-        const bulbCount = clamp(Math.round(num(params, "bulbCount", DEFAULTS.bulbCount)), 1, 2);
-        const closed = bool(params, "switchClosed", DEFAULTS.switchClosed);
-        const topology = str(params, "topology", DEFAULTS.topology) as Topology;
-        const material = str(params, "material", DEFAULTS.material) as Material;
-        const conducting = MATERIALS[material]?.conducting ?? true;
-        const fuse = bool(params, "fuse", DEFAULTS.fuse);
-        const ammeter = bool(params, "ammeter", DEFAULTS.ammeter);
-        const voltmeter = bool(params, "voltmeter", DEFAULTS.voltmeter);
-        const fuseLimit = 0.08;
-        const resistance = topology === "series" ? 90 + bulbCount * 70 : 90 + bulbCount * 35;
-        const rawCurrent = voltage / resistance;
-        const current = closed && conducting && (!fuse || rawCurrent <= fuseLimit) ? rawCurrent : 0;
-        const fuseBlown = fuse && rawCurrent > fuseLimit;
-        const brightness = clamp(current / 0.08, 0, 1);
-        return {
-          voltage,
-          bulbCount,
-          closed,
-          topology,
-          material,
-          conducting,
-          fuse,
-          ammeter,
-          voltmeter,
-          fuseBlown,
-          current,
-          brightness,
-        };
-      }
-
-      function publish() {
-        const s = state();
-        const circuitClosed = s.closed && s.conducting && !s.fuseBlown;
-        host.publishMeasurements([
-          {
-            id: "voltage",
-            label: "Voltage",
-            value: s.voltage,
-            unit: "V",
-            precision: 1,
-            emphasis: true,
-          },
-          {
-            id: "current",
-            label: "Current",
-            value: s.current,
-            unit: "A",
-            precision: 3,
-            emphasis: true,
-          },
-          { id: "state", label: "Circuit state", value: circuitClosed ? "CLOSED" : "OPEN" },
-          { id: "bulb", label: "Bulb state", value: circuitClosed ? "ON" : "OFF" },
-          {
-            id: "cells",
-            label: "Cells",
-            value: Math.max(1, Math.round(s.voltage / 1.5)),
-            precision: 0,
-          },
-          {
-            id: "branches",
-            label: "Branches",
-            value: s.topology === "parallel" ? s.bulbCount : 1,
-            precision: 0,
-          },
-        ]);
-        const warning = !s.conducting
-          ? `${MATERIALS[s.material].label} is an insulator: the path is broken and current is zero.`
-          : s.fuseBlown
-            ? "The fuse exceeded its safe current limit, heated up and opened the circuit."
-            : circuitClosed
-              ? "CIRCUIT CLOSED: the conducting path is complete, so current flows and the bulb lights."
-              : "CIRCUIT OPEN: the switch or material creates a break, so current stops and the bulb turns off.";
-        host.publishExplanation({ whatsHappening: warning });
-      }
-
-      function drawBulb(cx: number, cy: number, on: boolean, label: string) {
-        const s = state();
-        if (on)
-          componentLayer.append(
-            svg("circle", {
-              cx: String(cx),
-              cy: String(cy),
-              r: "28",
-              fill: "#ffd34e",
-              "fill-opacity": String(0.12 + s.brightness * 0.26),
-              filter: "url(#bulb-glow)",
-            }),
-          );
-        componentLayer.append(
-          svg("circle", {
-            cx: String(cx),
-            cy: String(cy),
-            r: "20",
-            fill: on ? "#ffd34e" : "#1a2634",
-            stroke: on ? "#fff0a4" : "#8ea6b8",
-            "stroke-width": "3",
-          }),
-          svg("path", {
-            d: `M ${cx - 9} ${cy + 8} Q ${cx} ${cy - 10} ${cx + 9} ${cy + 8}`,
-            fill: "none",
-            stroke: on ? "#fff8ca" : "#8ea6b8",
-            "stroke-width": "2",
-          }),
-          svg("line", {
-            x1: String(cx - 8),
-            y1: String(cy + 13),
-            x2: String(cx + 8),
-            y2: String(cy + 13),
-            stroke: "#8ea6b8",
-            "stroke-width": "2",
-          }),
-        );
-        labelLayer.append(text(cx, cy + 43, label, "#b7d5e4", 10, "middle"));
-      }
-
-      function drawPhysical(now: number) {
-        const s = state();
-        const circuitClosed = s.closed && s.conducting && !s.fuseBlown;
-        const wireColor = s.conducting ? "#83cfff" : MATERIALS[s.material].color;
-        wireLayer.append(path("M 150 180 L 150 430 L 650 430 L 650 180 L 150 180", wireColor, 6));
-        const switchX = 400;
+        term.dataset["node"] = String(n.id);
+        term.dataset["terminal"] = String(i);
+        nodeLayer.append(term);
+      });
+      nodeLayer.append(label(n.x, n.y + 45, n.kind.toUpperCase(), "#9bb8c9", 9, "middle"));
+    }
+    function draw() {
+      const a = analyze();
+      const diagram = str(params, "view", "physical") === "diagram";
+      wireLayer.replaceChildren();
+      flowLayer.replaceChildren();
+      nodeLayer.replaceChildren();
+      uiLayer.replaceChildren();
+      const wireStroke = a.closed ? "#83d9ff" : "#66849a";
+      wires.forEach((w) => {
+        const na = nodeBy(w.a.node),
+          nb = nodeBy(w.b.node);
+        if (!na || !nb) return;
+        const p = terminals(na)[w.a.terminal]!,
+          q = terminals(nb)[w.b.terminal]!;
         wireLayer.append(
-          line(350, 180, 382, 180, wireColor, 6),
-          line(418, 180, 450, 180, wireColor, 6),
+          svg("line", {
+            x1: String(p.x),
+            y1: String(p.y),
+            x2: String(q.x),
+            y2: String(q.y),
+            stroke: wireStroke,
+            "stroke-width": diagram ? "3" : "6",
+            "stroke-linecap": "round",
+          }),
         );
-        componentLayer.append(
-          svg("circle", { cx: "350", cy: "180", r: "7", fill: wireColor }),
-          svg("circle", { cx: "450", cy: "180", r: "7", fill: wireColor }),
-        );
-        componentLayer.append(
-          line(
-            350,
-            180,
-            circuitClosed ? 450 : 410,
-            circuitClosed ? 180 : 145,
-            circuitClosed ? "#e6f7ff" : "#ff9c86",
-            6,
-          ),
-        );
-        labelLayer.append(
-          text(
-            switchX,
-            120,
-            circuitClosed ? "SWITCH CLOSED" : "SWITCH OPEN",
-            circuitClosed ? "#8dffbf" : "#ffac9c",
-            11,
-            "middle",
-          ),
-        );
-        // Battery with two visible terminals.
-        componentLayer.append(
-          line(150, 275, 150, 330, "#eaf7ff", 9),
-          line(150, 260, 150, 345, "#eaf7ff", 3),
-        );
-        componentLayer.append(
-          text(108, 315, "−", "#9cc9df", 18, "middle"),
-          text(194, 315, "+", "#ffb36a", 18, "middle"),
-          text(150, 372, `${s.voltage.toFixed(1)} V CELL`, "#b9d9e9", 10, "middle"),
-        );
-        // Series/parallel bulb arrangement.
-        if (s.topology === "series") {
-          drawBulb(330, 430, circuitClosed, "BULB 1");
-          if (s.bulbCount > 1) drawBulb(500, 430, circuitClosed, "BULB 2");
-        } else {
-          wireLayer.append(
-            path("M 330 430 L 330 335 L 470 335 L 470 430", wireColor, 5),
-            path("M 330 430 L 330 525 L 470 525 L 470 430", wireColor, 5),
-          );
-          drawBulb(400, 335, circuitClosed, "BRANCH 1");
-          if (s.bulbCount > 1) drawBulb(400, 525, circuitClosed, "BRANCH 2");
-          componentLayer.append(
-            svg("circle", { cx: "330", cy: "430", r: "7", fill: "#f5fbff" }),
-            svg("circle", { cx: "470", cy: "430", r: "7", fill: "#f5fbff" }),
-          );
-        }
-        if (s.ammeter) {
-          componentLayer.append(
-            svg("circle", {
-              cx: "650",
-              cy: "300",
-              r: "27",
-              fill: "#102437",
-              stroke: "#8ce8ff",
-              "stroke-width": "3",
-            }),
-          );
-          labelLayer.append(
-            text(650, 307, "A", "#8ce8ff", 20, "middle"),
-            text(650, 350, "AMMETER / SERIES", "#9fc6d9", 9, "middle"),
-          );
-        }
-        if (s.voltmeter) {
-          componentLayer.append(
-            svg("circle", {
-              cx: "520",
-              cy: "180",
-              r: "27",
-              fill: "#102437",
-              stroke: "#ffb777",
-              "stroke-width": "3",
-            }),
-          );
-          labelLayer.append(
-            text(520, 187, "V", "#ffb777", 20, "middle"),
-            text(520, 235, "VOLTMETER / PARALLEL", "#9fc6d9", 9, "middle"),
-          );
-        }
-        if (s.fuse) {
-          componentLayer.append(
-            line(240, 180, 300, 180, wireColor, 4),
-            svg("rect", {
-              x: "272",
-              y: "168",
-              width: "36",
-              height: "24",
-              rx: "4",
-              fill: s.fuseBlown ? "#5c2e2a" : "#162b3b",
-              stroke: s.fuseBlown ? "#ff7f63" : "#ffbc78",
-              "stroke-width": "2",
-            }),
-          );
-          labelLayer.append(
-            text(
-              290,
-              220,
-              s.fuseBlown ? "FUSE OPEN" : "FUSE",
-              s.fuseBlown ? "#ff927e" : "#ffbc78",
-              9,
-              "middle",
-            ),
-          );
-        }
-        if (circuitClosed && bool(params, "showCurrent", true)) {
-          const dash = 22;
-          const offset = -((now / 35) % dash);
-          const flow = path(
-            "M 150 180 L 150 430 L 650 430 L 650 180 L 150 180",
-            "#fff2a0",
-            3,
-            `${dash} ${dash}`,
-          );
-          flow.setAttribute("stroke-dashoffset", String(offset));
-          flowLayer.append(flow);
-        }
-        labelLayer.append(
-          text(36, 44, "PHYSICS CIRCUITS / LIVE LAB", "#84eaff", 13),
-          text(36, 68, "CLOSED PATH → CURRENT → LIGHT", "#b8d8e8", 10),
-        );
-        const badge = svg("rect", {
-          x: "585",
-          y: "42",
-          width: "178",
-          height: "31",
-          rx: "15",
-          fill: "#081524",
-          stroke: circuitClosed ? "#8dffbf" : "#ff9c86",
-          "stroke-opacity": "0.8",
+      });
+      if (a.closed && bool(params, "showCurrent", true))
+        wires.forEach((w) => {
+          const na = nodeBy(w.a.node),
+            nb = nodeBy(w.b.node);
+          if (!na || !nb) return;
+          const p = terminals(na)[w.a.terminal]!,
+            q = terminals(nb)[w.b.terminal]!;
+          const f = svg("line", {
+            x1: String(p.x),
+            y1: String(p.y),
+            x2: String(q.x),
+            y2: String(q.y),
+            stroke: "#fff1a1",
+            "stroke-width": "3",
+            "stroke-dasharray": "12 12",
+            "stroke-linecap": "round",
+          });
+          f.setAttribute("stroke-dashoffset", String(-elapsed * 45));
+          flowLayer.append(f);
         });
-        labelLayer.append(
-          badge,
-          text(
-            674,
-            62,
-            circuitClosed ? "CIRCUIT CLOSED" : "CIRCUIT OPEN",
-            circuitClosed ? "#8dffbf" : "#ffac9c",
-            11,
-            "middle",
-          ),
+      nodes.forEach((n) => drawComponent(n, a, diagram));
+      uiLayer.append(
+        label(
+          28,
+          40,
+          diagram ? "TEXTBOOK CIRCUIT DIAGRAM" : "PHYSICS CIRCUITS / BUILD LAB",
+          "#86eaff",
+          14,
+        ),
+        label(28, 64, "BUILD → RUN → MEASURE → MODIFY", "#bad5e2", 10),
+      );
+      uiLayer.append(
+        svg("rect", {
+          x: "725",
+          y: "25",
+          width: "245",
+          height: "42",
+          rx: "20",
+          fill: "#071321",
+          stroke: a.closed ? "#8dffbf" : "#ff9e8c",
+          "stroke-width": "2",
+        }),
+        label(
+          847,
+          51,
+          a.closed ? "CIRCUIT CLOSED" : "CIRCUIT OPEN",
+          a.closed ? "#8dffbf" : "#ffae9d",
+          12,
+          "middle",
+        ),
+      );
+      uiLayer.append(
+        svg("rect", {
+          x: "18",
+          y: "92",
+          width: "206",
+          height: "558",
+          rx: "16",
+          fill: "#081421",
+          "fill-opacity": "0.92",
+          stroke: "#6f9bb4",
+          "stroke-opacity": "0.32",
+        }),
+        label(36, 122, "COMPONENT LIBRARY", "#ffd477", 11),
+      );
+      library.forEach((item, i) => {
+        const y = 150 + i * 45;
+        uiLayer.append(
+          svg("rect", {
+            x: "32",
+            y: String(y - 20),
+            width: "176",
+            height: "34",
+            rx: "8",
+            fill: "#102437",
+            stroke: "#4d7690",
+            "stroke-opacity": "0.7",
+          }),
+          label(48, y + 1, `${item.symbol}  ${item.label}`, "#d7ecf4", 10),
         );
+      });
+      uiLayer.append(
+        label(
+          255,
+          125,
+          "BLANK WORKSPACE · DRAG COMPONENTS HERE · CLICK TWO TERMINALS TO CONNECT",
+          "#9fc4d5",
+          10,
+        ),
+      );
+      uiLayer.append(
+        label(760, 110, `NODES ${nodes.length}  WIRES ${wires.length}`, "#9fc4d5", 10),
+      );
+    }
+    function point(e: MouseEvent) {
+      const r = scene.getBoundingClientRect();
+      return {
+        x: ((e.clientX - r.left) / r.width) * 1000,
+        y: ((e.clientY - r.top) / r.height) * 680,
+      };
+    }
+    scene.addEventListener("pointerdown", (e) => {
+      const p = point(e);
+      const target = e.target as SVGElement;
+      const nodeId = Number(target.dataset["node"]);
+      const terminal = Number(target.dataset["terminal"]);
+      if (Number.isFinite(nodeId) && Number.isFinite(terminal)) {
+        const item = { node: nodeId, terminal };
+        if (!selectedTerminal) selectedTerminal = item;
+        else attach(selectedTerminal, item);
+        draw();
+        return;
       }
-
-      function drawDiagram() {
-        const s = state();
-        const circuitClosed = s.closed && s.conducting && !s.fuseBlown;
-        const c = circuitClosed ? "#8dffbf" : "#ff9c86";
-        wireLayer.append(path("M 150 180 L 150 430 L 650 430 L 650 180 L 150 180", c, 4));
-        componentLayer.append(
-          line(140, 260, 160, 260, "#dff7ff", 4),
-          line(140, 300, 160, 300, "#dff7ff", 8),
-        );
-        labelLayer.append(text(150, 335, `${s.voltage.toFixed(1)} V`, "#b9d9e9", 10, "middle"));
-        componentLayer.append(
-          line(350, 180, 382, 180, c, 4),
-          line(418, 180, 450, 180, c, 4),
-          line(350, 180, circuitClosed ? 450 : 410, circuitClosed ? 180 : 145, c, 4),
-        );
-        for (let i = 0; i < s.bulbCount; i += 1) {
-          const cx = s.topology === "series" ? 330 + i * 170 : 400;
-          const cy = s.topology === "series" ? 430 : 335 + i * 190;
-          componentLayer.append(
-            svg("circle", {
-              cx: String(cx),
-              cy: String(cy),
-              r: "24",
-              fill: "none",
-              stroke: c,
-              "stroke-width": "3",
-            }),
-            svg("path", {
-              d: `M ${cx - 10} ${cy + 8} Q ${cx} ${cy - 10} ${cx + 10} ${cy + 8}`,
-              fill: "none",
-              stroke: c,
-              "stroke-width": "3",
-            }),
-          );
-          labelLayer.append(text(cx, cy + 42, `LAMP ${i + 1}`, "#b9d9e9", 9, "middle"));
+      const trayIndex = Math.floor((p.y - 130) / 45);
+      if (p.x < 225 && trayIndex >= 0 && trayIndex < library.length) {
+        const item = library[trayIndex];
+        if (item && item.kind !== "wire") {
+          const n = add(item.kind, 330 + (nextId % 4) * 120, 210 + Math.floor(nextId / 4) * 100);
+          drag = { node: n.id, dx: 0, dy: 0 };
         }
-        if (s.topology === "parallel") {
-          wireLayer.append(
-            path("M 330 430 L 330 335 L 470 335 L 470 430", c, 4),
-            path("M 330 430 L 330 525 L 470 525 L 470 430", c, 4),
-          );
-          componentLayer.append(
-            svg("circle", { cx: "330", cy: "430", r: "6", fill: c }),
-            svg("circle", { cx: "470", cy: "430", r: "6", fill: c }),
-          );
-        }
-        labelLayer.append(
-          text(36, 44, "TEXTBOOK CIRCUIT DIAGRAM", "#84eaff", 13),
-          text(
-            36,
-            68,
-            s.topology === "series" ? "SERIES: ONE PATH" : "PARALLEL: TWO BRANCHES",
-            "#b8d8e8",
-            10,
-          ),
-        );
-        const badge = svg("rect", {
-          x: "585",
-          y: "42",
-          width: "178",
-          height: "31",
-          rx: "15",
-          fill: "#081524",
-          stroke: c,
-          "stroke-opacity": "0.8",
-        });
-        labelLayer.append(
-          badge,
-          text(674, 62, circuitClosed ? "CIRCUIT CLOSED" : "CIRCUIT OPEN", c, 11, "middle"),
-        );
+        return;
       }
-
-      function render(now: number) {
-        const dt = Math.min(0.05, Math.max(0, (now - lastTime) / 1000));
-        lastTime = now;
-        if (running) {
-          elapsed += dt;
-          graphAccumulator += dt;
-          if (graphAccumulator >= 1 / 12) {
-            host.publishGraphSample({ x: elapsed, current: state().current });
-            graphAccumulator = 0;
-          }
-        }
-        wireLayer.replaceChildren();
-        flowLayer.replaceChildren();
-        componentLayer.replaceChildren();
-        labelLayer.replaceChildren();
-        const view = str(params, "view", DEFAULTS.view) as ViewMode;
-        if (view === "diagram") drawDiagram();
-        else drawPhysical(now);
-        raf = requestAnimationFrame(render);
+      const hit = nodes.find((n) => Math.hypot(n.x - p.x, n.y - p.y) < 32);
+      if (hit) drag = { node: hit.id, dx: p.x - hit.x, dy: p.y - hit.y };
+    });
+    scene.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      const p = point(e);
+      const n = nodeBy(drag.node);
+      if (n) {
+        n.x = clamp(p.x - drag.dx, 255, 950);
+        n.y = clamp(p.y - drag.dy, 145, 625);
+        draw();
       }
-      function setParams(next: SimulationParams) {
+    });
+    scene.addEventListener("pointerup", () => {
+      drag = null;
+    });
+    scene.addEventListener("dblclick", (e) => {
+      const p = point(e);
+      const n = nodes.find((x) => Math.hypot(x.x - p.x, x.y - p.y) < 32);
+      if (n?.kind === "switch") {
+        n.closed = !n.closed;
+        publish();
+        draw();
+      }
+    });
+    function render(now: number) {
+      const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
+      last = now;
+      if (running) {
+        elapsed += dt;
+        graphClock += dt;
+        if (graphClock > 1 / 12) {
+          host.publishGraphSample({ x: elapsed, current: analyze().current });
+          graphClock = 0;
+        }
+      }
+      draw();
+      raf = requestAnimationFrame(render);
+    }
+    publish();
+    raf = requestAnimationFrame(render);
+    return {
+      start() {
+        running = true;
+        host.setRunning(true);
+      },
+      pause() {
+        running = false;
+        host.setRunning(false);
+      },
+      reset,
+      resize(w, h) {
+        width = w;
+        height = h;
+        void width;
+        void height;
+      },
+      setParam(id, value) {
+        params[id] = value;
+        publish();
+        draw();
+      },
+      setParams(next) {
         params = { ...params, ...next };
         publish();
-      }
-      publish();
-      raf = requestAnimationFrame(render);
-      return {
-        start() {
+        draw();
+      },
+      onAction(actionId) {
+        if (actionId === "resetCircuit") reset();
+        if (actionId === "runExperiment") {
           running = true;
           host.setRunning(true);
-        },
-        pause() {
-          running = false;
-          host.setRunning(false);
-        },
-        reset() {
-          running = false;
-          elapsed = 0;
-          graphAccumulator = 0;
-          host.replaceGraphData([]);
-          host.setRunning(false);
           publish();
-        },
-        resize(w, h) {
-          width = w;
-          height = h;
-          void width;
-          void height;
-        },
-        setParam(id, value) {
-          params[id] = value;
-          publish();
-        },
-        setParams,
-        onAction(actionId) {
-          if (actionId === "resetCircuit") this.reset?.();
-        },
-        destroy() {
-          cancelAnimationFrame(raf);
-          root.replaceChildren();
-        },
-      };
-    },
-  };
-}
-
-export const roboticsCircuit = createCircuitModule();
+        }
+      },
+      destroy() {
+        cancelAnimationFrame(raf);
+        root.replaceChildren();
+      },
+    };
+  },
+};
