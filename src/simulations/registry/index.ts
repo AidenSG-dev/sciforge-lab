@@ -3,6 +3,7 @@ import { physicsPendulum } from "../modules/physics-pendulum";
 import { physicsBuoyancy } from "../modules/physics-buoyancy";
 import { chemistryStates } from "../modules/chemistry-states-of-matter";
 import { chemistryBonding } from "../modules/chemistry-bonding";
+import { roboticsCircuit } from "../modules/robotics-circuit";
 import type { SimulationModule, SubjectId } from "../types";
 
 /**
@@ -22,7 +23,7 @@ const modules: SimulationModule[] = [
   chemistryBonding,
   placeholders.biologyHeart,
   placeholders.biologyCell,
-  placeholders.roboticsCircuit,
+  roboticsCircuit,
   placeholders.roboticsObstacleRobot,
 ];
 
