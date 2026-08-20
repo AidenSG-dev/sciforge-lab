@@ -6,6 +6,22 @@ import type {
 } from "../types";
 
 const DEFAULT_RATE = 72;
+const DEFAULT_FLOW_PATH = true;
+const STRUCTURE_INFO: Record<string, string> = {
+  RA: "Receives oxygen-poor blood returning from the body.",
+  RV: "Pumps oxygen-poor blood toward the lungs.",
+  LA: "Receives oxygen-rich blood from the lungs.",
+  LV: "Pumps oxygen-rich blood into the aorta and throughout the body.",
+  "Superior Vena Cava": "Returns oxygen-poor blood from the upper body to the right atrium.",
+  "Inferior Vena Cava": "Returns oxygen-poor blood from the lower body to the right atrium.",
+  "Pulmonary Artery": "Carries oxygen-poor blood from the right ventricle to the lungs.",
+  "Pulmonary Veins": "Carry oxygen-rich blood from the lungs to the left atrium.",
+  Aorta: "Carries oxygen-rich blood from the left ventricle to the body.",
+  "Tricuspid Valve": "Valve prevents backward flow between the right atrium and right ventricle.",
+  "Pulmonary Valve": "Valve prevents backward flow from the pulmonary artery.",
+  "Mitral Valve": "Valve prevents backward flow between the left atrium and left ventricle.",
+  "Aortic Valve": "Valve prevents backward flow from the aorta.",
+};
 function numberParam(params: SimulationParams, id: string, fallback: number) {
   return typeof params[id] === "number" && Number.isFinite(params[id]) ? params[id] : fallback;
 }
@@ -51,6 +67,13 @@ export const biologyHeart: SimulationModule = {
     },
     {
       kind: "checkbox",
+      id: "showFlowPath",
+      label: "Show flow path",
+      defaultValue: DEFAULT_FLOW_PATH,
+      group: "Display",
+    },
+    {
+      kind: "checkbox",
       id: "highlightOxygen",
       label: "Highlight oxygenation",
       defaultValue: true,
@@ -83,6 +106,8 @@ export const biologyHeart: SimulationModule = {
     let graphClock = 0;
     let width = 800;
     let height = 600;
+    let selectedStructure = "";
+    let beats = 0;
     const root = document.createElement("div");
     root.className = "absolute inset-0 overflow-hidden";
     container.replaceChildren(root);
@@ -133,6 +158,15 @@ export const biologyHeart: SimulationModule = {
       labelLayer = svg("g", {});
     scene.append(vesselLayer, bloodLayer, heartLayer, labelLayer);
     root.append(scene);
+    scene.addEventListener("click", (event) => {
+      const target = event.target as SVGElement;
+      const structure = target.dataset["structure"];
+      if (structure) {
+        selectedStructure = structure;
+        publish();
+        draw(performance.now());
+      }
+    });
     const text = (
       x: number,
       y: number,
@@ -157,23 +191,13 @@ export const biologyHeart: SimulationModule = {
         "ATRIAL FILLING",
         "VENTRICULAR FILLING",
         "VENTRICULAR CONTRACTION",
-        "BLOOD LEAVING HEART",
-        "CIRCULATION CONTINUES",
+        "RELAXATION",
       ];
       const index = Math.floor(phase * names.length) % names.length;
       return {
         index,
         name: names[index]!,
-        active:
-          index === 0
-            ? "RA"
-            : index === 1
-              ? "RV"
-              : index === 2
-                ? "LV"
-                : index === 3
-                  ? "LV"
-                  : "BODY",
+        active: index === 0 ? "RA" : index === 1 ? "RV" : index === 2 ? "LV" : "BODY",
       };
     }
     function publish() {
@@ -189,6 +213,17 @@ export const biologyHeart: SimulationModule = {
           emphasis: true,
         },
         { id: "stage", label: "Current stage", value: stage.name },
+        { id: "oxygenated", label: "Oxygenated blood", value: stage.index >= 2 ? "YES" : "NO" },
+        { id: "flow", label: "Blood flow", value: running ? "ACTIVE" : "PAUSED" },
+        { id: "beats", label: "Beats completed", value: beats, precision: 0 },
+        { id: "cycle", label: "Cycle duration", value: 60 / rate, unit: "s", precision: 2 },
+        {
+          id: "selected",
+          label: selectedStructure || "Selected structure",
+          value: selectedStructure
+            ? (STRUCTURE_INFO[selectedStructure] ?? "Explore this structure.")
+            : "Click a chamber, vessel or valve",
+        },
         {
           id: "oxygen",
           label: "Blood pathway",
@@ -196,10 +231,11 @@ export const biologyHeart: SimulationModule = {
         },
       ]);
       host.publishExplanation({
-        whatsHappening:
-          stage.index < 2
-            ? "Dark red blood is filling the right side of the heart and preparing to travel to the lungs."
-            : "Bright red blood has returned from the lungs and is being sent from the left ventricle to the body.",
+        whatsHappening: selectedStructure
+          ? (STRUCTURE_INFO[selectedStructure] ?? "Explore the highlighted heart structure.")
+          : stage.index < 2
+            ? "Blue blood is filling the right side of the heart and preparing to travel to the lungs."
+            : "Red blood has returned from the lungs and is being sent from the left ventricle to the body.",
       });
     }
     function draw(now: number) {
@@ -214,55 +250,124 @@ export const biologyHeart: SimulationModule = {
       const stage = stageInfo();
       const labels = boolParam(params, "labels", true);
       const oxy = boolParam(params, "highlightOxygen", true);
+      const showFlowPath = boolParam(params, "showFlowPath", DEFAULT_FLOW_PATH);
       const pulse = running ? 1 + contraction * 0.035 : 1;
+      const vessel = (d: string, structure: string, stroke: string, widthValue: number) => {
+        const path = svg("path", {
+          d,
+          fill: "none",
+          stroke,
+          "stroke-width": String(widthValue),
+          "stroke-linecap": "round",
+        });
+        path.dataset["structure"] = structure;
+        return path;
+      };
       vesselLayer.append(
-        svg("path", {
-          d: "M 210 250 C 105 170 80 100 150 58",
-          fill: "none",
-          stroke: "#6f8297",
-          "stroke-width": "26",
-          "stroke-linecap": "round",
+        vessel("M 210 250 C 105 170 80 100 150 58", "Superior Vena Cava", "#47789f", 24),
+        vessel("M 250 395 C 180 475 120 520 90 570", "Inferior Vena Cava", "#47789f", 20),
+        vessel("M 330 385 C 255 360 220 300 210 250", "Pulmonary Artery", "#47789f", 20),
+        vessel("M 690 250 C 795 170 820 100 750 58", "Pulmonary Veins", "#d94452", 22),
+        vessel("M 570 385 C 645 360 680 300 690 250", "Aorta", "#d94452", 24),
+        vessel("M 595 330 C 690 390 770 465 810 570", "Aorta", "#d94452", 24),
+      );
+      heartLayer.append(
+        svg("ellipse", {
+          cx: "132",
+          cy: "92",
+          rx: "58",
+          ry: "26",
+          fill: "#26394e",
+          stroke: "#7ba5c4",
+          "stroke-width": "2",
         }),
-        svg("path", {
-          d: "M 690 250 C 795 170 820 100 750 58",
-          fill: "none",
-          stroke: "#8a4450",
-          "stroke-width": "26",
-          "stroke-linecap": "round",
+        svg("ellipse", {
+          cx: "768",
+          cy: "92",
+          rx: "58",
+          ry: "26",
+          fill: "#3a273c",
+          stroke: "#d87883",
+          "stroke-width": "2",
         }),
-        svg("path", {
-          d: "M 305 330 C 210 390 130 465 90 570",
+      );
+      const highlightPath = (d: string, color: string) => {
+        const p = svg("path", {
+          d,
           fill: "none",
-          stroke: "#7b3b48",
-          "stroke-width": "24",
+          stroke: color,
+          "stroke-width": "8",
           "stroke-linecap": "round",
-        }),
-        svg("path", {
-          d: "M 595 330 C 690 390 770 465 810 570",
-          fill: "none",
-          stroke: "#b23f4b",
-          "stroke-width": "24",
-          "stroke-linecap": "round",
-        }),
+          "stroke-dasharray": "14 14",
+          "stroke-opacity": "0.8",
+        });
+        p.setAttribute("stroke-dashoffset", String(-elapsed * 32));
+        vesselLayer.append(p);
+      };
+      if (showFlowPath) {
+        const color = stage.index < 2 ? "#67b9ff" : "#ff6773";
+        if (stage.index === 0) highlightPath("M 90 570 C 130 500 220 420 370 265", color);
+        else if (stage.index === 1)
+          highlightPath("M 370 265 L 370 390 C 300 380 240 300 210 250", color);
+        else if (stage.index === 2)
+          highlightPath("M 530 265 L 530 390 C 630 360 740 470 810 570", color);
+        else highlightPath("M 210 250 C 150 150 300 80 450 120 C 600 80 750 150 690 250", color);
+      }
+      labelLayer.append(
+        text(130, 48, "SUPERIOR VENA CAVA", "#a8d4eb", 9, "middle"),
+        text(135, 555, "INFERIOR VENA CAVA", "#a8d4eb", 9, "middle"),
+        text(205, 315, "PULMONARY ARTERY", "#a8d4eb", 9, "middle"),
+        text(695, 315, "PULMONARY VEINS", "#ffc0c6", 9, "middle"),
+        text(755, 555, "AORTA", "#ffc0c6", 10, "middle"),
+        text(132, 98, "LUNGS", "#c4e7f8", 11, "middle"),
+        text(768, 98, "O₂ EXCHANGE", "#ffd3d8", 10, "middle"),
       );
       const bodyPath = "M 90 570 C 130 465 210 390 305 330";
       const lungPath = "M 210 250 C 105 170 80 100 150 58";
       const lungPath2 = "M 690 250 C 795 170 820 100 750 58";
       const bodyOut = "M 595 330 C 690 390 770 465 810 570";
       if (running) {
-        const particleCount = 7;
+        const route = [
+          [90, 570],
+          [150, 470],
+          [250, 395],
+          [370, 265],
+          [370, 390],
+          [330, 385],
+          [260, 285],
+          [210, 250],
+          [150, 120],
+          [690, 120],
+          [690, 250],
+          [530, 265],
+          [530, 390],
+          [570, 385],
+          [650, 300],
+          [730, 430],
+          [810, 570],
+        ] as const;
+        const particleCount = 9;
+        const progressRate = 0.11 + rate / 1500;
         for (let i = 0; i < particleCount; i += 1) {
-          const p = (elapsed * (0.18 + rate / 9000) + i / particleCount) % 1;
-          const x = 450 + Math.cos(p * Math.PI * 2) * 190;
-          const y = 325 + Math.sin(p * Math.PI * 2) * 220;
-          const oxygenated = p > 0.48;
+          const p = (elapsed * progressRate + i / particleCount) % 1;
+          const scaled = p * (route.length - 1);
+          const segment = Math.min(route.length - 2, Math.floor(scaled));
+          const local = scaled - segment;
+          const [x1, y1] = route[segment]!;
+          const [x2, y2] = route[segment + 1]!;
+          const x = x1 + (x2 - x1) * local;
+          const y = y1 + (y2 - y1) * local;
+          const oxygenProgress = p > 0.47 && p < 0.62 ? (p - 0.47) / 0.15 : p >= 0.62 ? 1 : 0;
+          const red = Math.round(143 + oxygenProgress * 112);
+          const green = Math.round(39 + oxygenProgress * 42);
+          const blue = Math.round(56 + oxygenProgress * 45);
           bloodLayer.append(
             svg("circle", {
               cx: String(x),
               cy: String(y),
               r: "6",
-              fill: oxygenated ? "#ff5361" : "#8f2738",
-              "fill-opacity": "0.95",
+              fill: `rgb(${red},${green},${blue})`,
+              "fill-opacity": "0.96",
             }),
           );
         }
@@ -305,6 +410,17 @@ export const biologyHeart: SimulationModule = {
             "fill-opacity": "0.8",
           }),
         );
+        const chamberHit = svg("ellipse", {
+          cx: String(ch.x),
+          cy: String(ch.y),
+          rx: "62",
+          ry: "76",
+          fill: "transparent",
+          stroke: "transparent",
+          "stroke-width": "10",
+        });
+        chamberHit.dataset["structure"] = ch.id;
+        heartLayer.append(chamberHit);
         if (labels)
           labelLayer.append(
             text(ch.x, ch.y + 5, ch.id, "#fff4f2", 18, "middle"),
@@ -312,19 +428,22 @@ export const biologyHeart: SimulationModule = {
           );
       });
       // Valves and pathway arrows.
-      [
-        [450, 307, 450, 338],
-        [450, 438, 450, 480],
-      ].forEach(([x1, y1, x2, y2]) =>
-        heartLayer.append(
-          svg("path", {
-            d: `M ${x1! - 12} ${y1} L ${x1!} ${y2} L ${x1! + 12} ${y1}`,
-            fill: "none",
-            stroke: "#f6e7bf",
-            "stroke-width": "4",
-          }),
-        ),
-      );
+      const valves: Array<[number, number, number, number, string]> = [
+        [450, 307, 450, 338, "Tricuspid Valve"],
+        [450, 307, 450, 338, "Mitral Valve"],
+        [450, 438, 450, 480, "Pulmonary Valve"],
+        [450, 438, 450, 480, "Aortic Valve"],
+      ];
+      valves.forEach(([x1, y1, x2, y2, valve]) => {
+        const valvePath = svg("path", {
+          d: `M ${x1! - 12} ${y1} L ${x1!} ${y2} L ${x1! + 12} ${y1}`,
+          fill: "none",
+          stroke: "#f6e7bf",
+          "stroke-width": "4",
+        });
+        valvePath.dataset["structure"] = String(valve);
+        heartLayer.append(valvePath);
+      });
       labelLayer.append(
         text(32, 44, "HEART CIRCULATION / LIVE MODEL", "#87ebff", 14),
         text(32, 70, "DARK RED = DEOXYGENATED  •  BRIGHT RED = OXYGENATED", "#b7d5e4", 10),
@@ -363,10 +482,18 @@ export const biologyHeart: SimulationModule = {
       });
       labelLayer.append(
         panel,
-        text(48, 528, "CURRENT STAGE", "#ffd578", 10),
+        text(48, 528, "CARDIAC CYCLE", "#ffd578", 10),
         text(48, 554, stage.name, "#f3fbff", 13),
         text(48, 580, `HEART RATE  ${Math.round(rate)} BPM`, "#9fc5d6", 10),
-        text(48, 600, "BODY → RA → RV → LUNGS → LA → LV → BODY", "#9fc5d6", 9),
+        text(
+          48,
+          600,
+          selectedStructure
+            ? `${selectedStructure}: ${STRUCTURE_INFO[selectedStructure] ?? "Explore this structure."}`
+            : "Click a chamber, vessel or valve",
+          "#9fc5d6",
+          9,
+        ),
       );
       void now;
       void oxy;
@@ -381,7 +508,9 @@ export const biologyHeart: SimulationModule = {
       if (running) {
         const rate = numberParam(params, "heartRate", DEFAULT_RATE);
         elapsed += dt;
-        phase = (phase + (dt * rate) / 60 / 5) % 1;
+        const previousPhase = phase;
+        phase = (phase + (dt * rate) / 60 / 4) % 1;
+        if (phase < previousPhase) beats += 1;
         graphClock += dt;
         if (graphClock > 1 / 12) {
           host.publishGraphSample({ x: elapsed, flow: running ? 1 : 0 });
@@ -408,6 +537,8 @@ export const biologyHeart: SimulationModule = {
         elapsed = 0;
         phase = 0;
         graphClock = 0;
+        beats = 0;
+        selectedStructure = "";
         host.replaceGraphData([]);
         host.setRunning(false);
         publish();
@@ -421,10 +552,12 @@ export const biologyHeart: SimulationModule = {
       setParam(id, value) {
         params[id] = value;
         publish();
+        draw(performance.now());
       },
       setParams(next) {
         params = { ...params, ...next };
         publish();
+        draw(performance.now());
       },
       destroy() {
         cancelAnimationFrame(raf);
