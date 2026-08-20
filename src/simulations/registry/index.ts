@@ -25,7 +25,6 @@ const modules: SimulationModule[] = [
   biologyHeart,
   placeholders.biologyCell,
   roboticsCircuit,
-  placeholders.roboticsObstacleRobot,
 ];
 
 const registry = new Map<string, SimulationModule>(modules.map((m) => [m.id, m]));
