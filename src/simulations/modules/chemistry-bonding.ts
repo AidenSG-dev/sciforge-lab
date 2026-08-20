@@ -454,11 +454,18 @@ function createBondingModule(): SimulationModule {
                     { x: 400, y: 500 },
                   ];
         const moleculeFormula = spec?.formula;
+        const bondedOuterRadius = Math.max(
+          60,
+          ...(spec?.atoms ?? []).map((symbol) =>
+            (ATOMS[symbol]?.shells.length ?? 1) > 1 ? 80 : 60,
+          ),
+        );
+        const finalCenterDistance = bondedOuterRadius * 2 - 10;
         const final: Array<{ x: number; y: number }> =
           count === 2
             ? [
-                { x: 400 - Math.max(98, 30 + distance * 10) / 2, y: 308 },
-                { x: 400 + Math.max(98, 30 + distance * 10) / 2, y: 308 },
+                { x: 400 - finalCenterDistance / 2, y: 308 },
+                { x: 400 + finalCenterDistance / 2, y: 308 },
               ]
             : moleculeFormula === "H₂O"
               ? [
@@ -575,9 +582,10 @@ function createBondingModule(): SimulationModule {
             data.shells.forEach((shellElectrons, shellIndex) => {
               const isInnerShell = shellIndex === 0;
               const isValenceShell = shellIndex === data.shells.length - 1;
-              // Nucleus → K = 10px, K → L = 10px, L → valence = 13px.
+              // Shell gaps: nucleus → K = 20px, each inner gap = 20px, preceding shell → valence = 30px.
               // Only the outer green valence shell is allowed to intersect its partner.
-              const radius = isValenceShell ? 53 : 30 + shellIndex * 10;
+              const radius =
+                data.shells.length === 1 ? 60 : isValenceShell ? 80 : 30 + shellIndex * 20;
               const shellRotation = running && (isInnerShell ? data.shells.length > 1 : !formed);
               const shellTime = shellRotation ? now : 0;
               atomLayer.append(
