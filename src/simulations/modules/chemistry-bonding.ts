@@ -662,13 +662,11 @@ function createBondingModule(): SimulationModule {
                   const memberSign = selectedConnection.a === index ? -1 : 1;
                   const overlapOffset =
                     selectedConnection.order === 1
-                      ? memberSign * 8
-                      : (pairInConnection - (selectedConnection.order - 1) / 2) * 11;
-                  const bondUnitX = dx / length;
-                  const bondUnitY = dy / length;
+                      ? memberSign * 20
+                      : (pairInConnection - (selectedConnection.order - 1) / 2) * 14;
                   const target = {
-                    x: overlapCenterX + normalX * overlapOffset + bondUnitX * memberSign * 2,
-                    y: overlapCenterY + normalY * overlapOffset + bondUnitY * memberSign * 2,
+                    x: overlapCenterX + normalX * overlapOffset,
+                    y: overlapCenterY + normalY * overlapOffset,
                   };
                   targetX = orbitX + (target.x - orbitX) * shareProgress;
                   targetY = orbitY + (target.y - orbitY) * shareProgress;
