@@ -457,8 +457,8 @@ function createBondingModule(): SimulationModule {
         const final: Array<{ x: number; y: number }> =
           count === 2
             ? [
-                { x: 400 - Math.min(56, Math.max(42, 32 + distance * 10)) / 2, y: 308 },
-                { x: 400 + Math.min(56, Math.max(42, 32 + distance * 10)) / 2, y: 308 },
+                { x: 400 - Math.max(98, 30 + distance * 10) / 2, y: 308 },
+                { x: 400 + Math.max(98, 30 + distance * 10) / 2, y: 308 },
               ]
             : moleculeFormula === "H₂O"
               ? [
@@ -575,8 +575,9 @@ function createBondingModule(): SimulationModule {
             data.shells.forEach((shellElectrons, shellIndex) => {
               const isInnerShell = shellIndex === 0;
               const isValenceShell = shellIndex === data.shells.length - 1;
-              // K and L shells are deliberately spaced; only the outer green valence shell forms the bond lens.
-              const radius = isValenceShell ? 60 : 26 + shellIndex * 22;
+              // Nucleus → K = 10px, K → L = 10px, L → valence = 13px.
+              // Only the outer green valence shell is allowed to intersect its partner.
+              const radius = isValenceShell ? 53 : 30 + shellIndex * 10;
               const shellRotation = running && (isInnerShell ? data.shells.length > 1 : !formed);
               const shellTime = shellRotation ? now : 0;
               atomLayer.append(
