@@ -669,21 +669,36 @@ function createBondingModule(): SimulationModule {
                   const dx = bondEnd.x - bondStart.x;
                   const dy = bondEnd.y - bondStart.y;
                   const length = Math.max(1, Math.hypot(dx, dy));
+                  const bondUnitX = dx / length;
+                  const bondUnitY = dy / length;
                   // Use one canonical normal for both atoms so the pair is always opposite: top/bottom for a horizontal bond.
-                  const normalX = -dy / length;
-                  const normalY = dx / length;
-                  const overlapCenterX = (x + otherPoint.x) / 2;
-                  const overlapCenterY = (y + otherPoint.y) / 2;
+                  const normalX = -bondUnitY;
+                  const normalY = bondUnitX;
+                  const selfRadius = data.shells.length === 1 ? 60 : 80;
+                  const otherSymbol = currentSpec.atoms[otherIndex] ?? "H";
+                  const otherRadius = (ATOMS[otherSymbol]?.shells.length ?? 1) === 1 ? 60 : 80;
+                  const towardOtherX = selectedConnection.a === index ? bondUnitX : -bondUnitX;
+                  const towardOtherY = selectedConnection.a === index ? bondUnitY : -bondUnitY;
+                  const axisDistance = clamp(
+                    (selfRadius * selfRadius - otherRadius * otherRadius + length * length) /
+                      (2 * length),
+                    0,
+                    length,
+                  );
+                  const overlapCenterX = x + towardOtherX * axisDistance;
+                  const overlapCenterY = y + towardOtherY * axisDistance;
+                  const intersectionHalfHeight = Math.sqrt(
+                    Math.max(0, selfRadius * selfRadius - axisDistance * axisDistance),
+                  );
                   const memberSign = selectedConnection.a === index ? -1 : 1;
                   const overlapOffset =
                     selectedConnection.order === 1
-                      ? memberSign * 20
-                      : (pairInConnection - (selectedConnection.order - 1) / 2) * 14;
-                  const bondUnitX = dx / length;
-                  const bondUnitY = dy / length;
+                      ? memberSign * Math.min(18, intersectionHalfHeight * 0.62)
+                      : (pairInConnection - (selectedConnection.order - 1) / 2) *
+                        Math.min(12, intersectionHalfHeight * 0.42);
                   const sharedAxisOffset =
                     selectedConnection.order > 1
-                      ? (selectedConnection.a === index ? -1 : 1) * 7
+                      ? (selectedConnection.a === index ? -1 : 1) * Math.min(7, length * 0.04)
                       : 0;
                   const target = {
                     x: overlapCenterX + normalX * overlapOffset + bondUnitX * sharedAxisOffset,
